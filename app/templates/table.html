@@ -125,7 +125,49 @@
                     filters: true,
                     dropdownMenu: true,
                     minSpareRows: 0,
-                    contextMenu: ['row_above', 'row_below', 'remove_row'],
+                    contextMenu: {
+                        items: {
+                            'remove_row': {
+                                name: 'Delete Bridge',
+                                callback: function(key, selection) {
+                                    // Get the bridge data from the selected row
+                                    const row = selection[0].start.row;
+                                    const bridgeData = this.getSourceDataAtRow(row);
+                                    
+                                    if (!bridgeData || !bridgeData.bin) {
+                                        alert('Invalid bridge selection');
+                                        return;
+                                    }
+
+                                    // Confirm deletion
+                                    if (confirm(`Are you sure you want to delete bridge ${bridgeData.bin}?`)) {
+                                        // Send DELETE request to server
+                                        fetch(`/api/bridges/${bridgeData.bin}`, {
+                                            method: 'DELETE',
+                                            headers: {
+                                                'Content-Type': 'application/json'
+                                        }
+                                        })
+                                        .then(response => {
+                                            if (!response.ok) {
+                                                return response.json().then(err => Promise.reject(err));
+                                            }
+                                            return response.json();
+                                        })
+                                        .then(() => {
+                                            // Remove row from the table
+                                            this.alter('remove_row', row);
+                                            console.log(`Bridge ${bridgeData.bin} deleted successfully`);
+                                        })
+                                        .catch(error => {
+                                            console.error('Error deleting bridge:', error);
+                                            alert(`Failed to delete bridge: ${error.message || 'Unknown error'}`);
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    },
                     licenseKey: 'non-commercial-and-evaluation',
                     afterChange: function(changes, source) {
                         if (!changes || source === 'loadData' || source === 'external') return;

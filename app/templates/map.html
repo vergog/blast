@@ -142,10 +142,10 @@
         background: none;
         border: none;
         font-weight: bold;
-        font-size: 14px;
+        font-size: 16px;
         cursor: pointer;
-        color: #333;
-        margin-left: 8px;
+        padding: 0 6px;
+        color: #666;
     }
     .filter-group.collapsed label {
         display: none;
@@ -157,7 +157,7 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-bottom: 5px;
+        margin-bottom: 8px;
     }
 
 
@@ -241,9 +241,38 @@
         box-shadow: 0 1px 6px rgba(0,0,0,0.3);
     }
 
-    .collapsible-content.collapsed {
-        display: none;
+    .collapsible-content {
+        display: block;
+        margin-left: 15px;
     }
+
+    .collapsible-content.collapsed {
+        display: none !important;
+    }
+
+    .filter-group {
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #eee;
+    }
+
+    .filter-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+
+    .collapse-toggle {
+        background: none;
+        border: none;
+        font-weight: bold;
+        font-size: 16px;
+        cursor: pointer;
+        padding: 0 6px;
+        color: #666;
+    }
+
     #map {
         height: 100vh;
         width: 100%;
@@ -325,9 +354,9 @@
         <!-- Inspection Status -->
         <div id="filter-status" class="filter-group">
           <strong>Inspection Status</strong>
-          <label><input type="checkbox" class="filter-checkbox status" value="Assigned" checked> Assigned</label>
-          <label><input type="checkbox" class="filter-checkbox status" value="Scheduled" checked> Scheduled</label>
-          <label><input type="checkbox" class="filter-checkbox status" value="Inspected" checked> Inspected</label>
+          <label><input type="checkbox" class="filter-checkbox status" value="Assigned" data-group="status" checked> Assigned</label>
+          <label><input type="checkbox" class="filter-checkbox status" value="Scheduled" data-group="status" checked> Scheduled</label>
+          <label><input type="checkbox" class="filter-checkbox status" value="Inspected" data-group="status" checked> Inspected</label>
         </div>
 
         <!-- Active Flags -->
@@ -358,7 +387,7 @@
             </div>
           </div>
           <div id="filter-week-content" class="collapsible-content collapsed">
-            <div id="filter-week-content"></div>
+            <div id="filter-week-items"></div>
           </div>
         </div>
           
@@ -372,7 +401,7 @@
             </div>
           </div>
           <div id="filter-due_month-content" class="collapsible-content collapsed">
-            <div id="filter-due_month-content"></div>
+            <div id="filter-due_month-items"></div>
           </div>
         </div>
           
@@ -406,6 +435,7 @@
     // Initialize global variables
     let map; 
     let markersGroup;
+    let bridgeData = [];  // Add this line
     const binToMarker = {};    
     const allMarkers = [];     
     const socket = io();       // Initialize Socket.IO connection
@@ -485,12 +515,11 @@
 
     // Helper function to determine bridge status
     function getStatus(bridge) {
-        if (bridge.completed && bridge.completed.trim()) {
-            return "Inspected";
-        } else if (bridge.week && bridge.week.trim().toLowerCase() !== "unscheduled") {
-            return "Scheduled";
-        }
-        return "Assigned";
+        const inspected = bridge.completed && bridge.completed.trim() !== "";
+        const scheduled = !inspected && 
+            bridge.week && 
+            bridge.week.trim().toLowerCase() !== "unscheduled";
+        return inspected ? "Inspected" : scheduled ? "Scheduled" : "Assigned";
     }
 
     // Helper function to get marker color based on status
@@ -502,29 +531,125 @@
         }
     }
     
+    // Initialize filter state object
+    const filters = {
+        flags: new Set(),
+        posting: new Set(),
+        access: new Set(),
+        week: new Set(),
+        due_month: new Set(),
+        status: new Set(['Assigned', 'Scheduled', 'Inspected']) // Initialize with all statuses
+    };
+
+    // Helper function to get bridge status
+    function getBridgeStatus(bridge) {
+        const inspected = bridge.completed && bridge.completed.trim() !== "";
+        const scheduled = !inspected && 
+            bridge.week && 
+            bridge.week.trim().toLowerCase() !== "unscheduled";
+        return inspected ? "Inspected" : scheduled ? "Scheduled" : "Assigned";
+    }
+
+    // Helper functions for sorting
+    function sortMonths(monthSet) {
+        const monthOrder = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        ];
+        return Array.from(monthSet).sort(
+            (a, b) => monthOrder.indexOf(a) - monthOrder.indexOf(b)
+        );
+    }
+
+    function sortWeeks(weekSet) {
+        return Array.from(weekSet).sort((a, b) => {
+            const dateA = new Date("2025/" + a.replace("Week of ", ""));
+            const dateB = new Date("2025/" + b.replace("Week of ", ""));
+            return dateA - dateB;
+        });
+    }
+
+    function pushUnscheduledToEnd(arr) {
+        return arr.filter(v => v !== "Unscheduled").concat(
+            arr.includes("Unscheduled") ? ["Unscheduled"] : []
+        );
+    }
+
+    // Function to create filter checkboxes
+    function createFilterCheckboxes() {
+        const unique = {
+            flags: new Set(),
+            posting: new Set(),
+            access: new Set(),
+            week: new Set(),
+            due_month: new Set()
+        };
+
+        // Gather unique values
+        bridgeData.forEach(b => {
+            unique.flags.add(b.flags);
+            unique.posting.add(b.posting);
+            unique.access.add(b.access);
+            unique.week.add(b.week);
+            unique.due_month.add(b.due_month);
+        });
+
+        // Create checkboxes for each filter group
+        function createCheckbox(containerId, groupKey, values) {
+            const container = document.getElementById(containerId);
+            values.forEach(val => {
+                const safeId = `${containerId}-${val.replace(/\W+/g, "_")}`;
+                const label = document.createElement("label");
+                label.innerHTML = `
+                    <input type="checkbox" 
+                        id="${safeId}" 
+                        value="${val}" 
+                        data-group="${groupKey}" 
+                        checked> ${val}`;
+                container.appendChild(label);
+                filters[groupKey].add(val);
+            });
+        }
+
+        // Initialize each filter group
+        createCheckbox("filter-flags", "flags", Array.from(unique.flags));
+        createCheckbox("filter-posting", "posting", Array.from(unique.posting));
+        createCheckbox("filter-access", "access", Array.from(unique.access));
+        createCheckbox("filter-week-items", "week", 
+            pushUnscheduledToEnd(sortWeeks(unique.week)));
+        createCheckbox("filter-due_month-items", "due_month", 
+            sortMonths(unique.due_month));
+    }
+
+    // Function to check if a bridge passes all current filters
+    function passesFilters(bridge) {
+        const status = getStatus(bridge);
+        if (!filters.status.has(status)) return false;
+
+        return (
+            filters.flags.has(bridge.flags) &&
+            filters.posting.has(bridge.posting) &&
+            filters.access.has(bridge.access) &&
+            filters.week.has(bridge.week) &&
+            filters.due_month.has(bridge.due_month)
+        );
+    }
+
+    // Update markers based on current filters
     function updateMarkers() {
-        if (!map) return;
-        
-        // Get current map bounds
-        const bounds = map.getBounds();
-        
-        // Count visible markers
         let visibleCount = 0;
-        
+
         allMarkers.forEach(({ marker, data }) => {
-            const latLng = marker.getLatLng();
-            const isInBounds = bounds.contains(latLng);
-            
-            if (isInBounds) {
+            if (passesFilters(data)) {
+                if (!map.hasLayer(marker)) map.addLayer(marker);
                 visibleCount++;
+            } else {
+                if (map.hasLayer(marker)) map.removeLayer(marker);
             }
         });
-        
-        // Update the counter display
-        const counter = document.getElementById('visibleCounter');
-        if (counter) {
-            counter.textContent = `Visible Bridges: ${visibleCount}`;
-        }
+
+        document.getElementById("visibleCounter").textContent = 
+            `Visible Bridges: ${visibleCount}`;
     }
 
     document.addEventListener("DOMContentLoaded", function () {
@@ -533,6 +658,8 @@
         
         // Initialize markers layer group after map is created
         markersGroup = L.layerGroup().addTo(map);
+
+        map.on('zoomend', updateBinLabelVisibility);
         
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors'
@@ -546,10 +673,13 @@
                 return response.json();
             })
             .then(data => {
-                console.log("Received bridge data:", data); // Debug logging
+                console.log("Received bridge data:", data);
                 
-                // Ensure we have an array to work with
-                const bridgeData = Array.isArray(data) ? data : [];
+                // Store the bridge data globally
+                bridgeData = Array.isArray(data) ? data : [];
+                
+                // Initialize filters after we have the data
+                createFilterCheckboxes();
                 
                 // Process each bridge
                 bridgeData.forEach(bridge => {
@@ -588,6 +718,80 @@
                     }).addTo(map);
 
                     allMarkers.push({ marker, data: bridge });
+                });
+
+                // Set up filter checkbox event listeners
+                document.querySelectorAll("#filterPanel input[type=checkbox]").forEach(cb => {
+                    cb.addEventListener("change", () => {
+                        const group = cb.dataset.group;
+                        const val = cb.value;
+                        
+                        if (cb.checked) {
+                            filters[group].add(val);
+                        } else {
+                            filters[group].delete(val);
+                        }
+                        
+                        updateMarkers();
+                        updateBinLabelVisibility();
+                    });
+                });
+
+                // Initialize status filter checkboxes
+                document.querySelectorAll('.filter-checkbox.status').forEach(cb => {
+                    cb.addEventListener('change', () => {
+                        const val = cb.value;
+                        const group = 'status'; // explicitly set group for status checkboxes
+                        
+                        if (cb.checked) {
+                            filters[group].add(val);
+                        } else {
+                            filters[group].delete(val);
+                        }
+                        
+                        updateMarkers();
+                        updateBinLabelVisibility();
+                    });
+                });
+
+                // Modify the existing filter checkbox event listener to exclude status checkboxes
+                document.querySelectorAll("#filterPanel input[type=checkbox]:not(.status)").forEach(cb => {
+                    cb.addEventListener("change", () => {
+                        const group = cb.dataset.group;
+                        const val = cb.value;
+                        
+                        if (cb.checked) {
+                            filters[group].add(val);
+                        } else {
+                            filters[group].delete(val);
+                        }
+                        
+                        updateMarkers();
+                        updateBinLabelVisibility();
+                    });
+                });
+
+                // Set up All/None toggle buttons
+                document.querySelectorAll(".toggle-btn").forEach(btn => {
+                    btn.addEventListener("click", () => {
+                        const group = btn.dataset.group;
+                        const checkboxes = document.querySelectorAll(
+                            `#filter-${group}-content input[type=checkbox]`
+                        );
+                        
+                        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+                        filters[group].clear();  // reset group
+
+                        checkboxes.forEach(cb => {
+                            cb.checked = !allChecked;
+                            if (!allChecked) {
+                                filters[group].add(cb.value);
+                            }
+                        });
+
+                        updateMarkers();
+                        updateBinLabelVisibility();
+                    });
                 });
 
                 updateLabelVisibility();
@@ -777,6 +981,65 @@
 
         // Update markers count
         updateMarkers();
+    });
+
+    // Add this with your other Socket.IO listeners
+    socket.on('bridge_deleted', (data) => {
+        console.log('Bridge deleted:', data.bin);
+        
+        // Get the marker for this bridge
+        const marker = binToMarker[data.bin];
+        if (!marker) return;
+
+        // Remove the marker from the map
+        map.removeLayer(marker);
+        
+        // Remove from binToMarker object
+        delete binToMarker[data.bin];
+        
+        // Remove from allMarkers array
+        const markerIndex = allMarkers.findIndex(m => m.data.bin === data.bin);
+        if (markerIndex !== -1) {
+            allMarkers.splice(markerIndex, 1);
+        }
+        
+        // Update markers count
+        updateMarkers();
+    });
+
+    // Add this function with your other utility functions
+    function updateBinLabelVisibility() {
+        if (!map) return;
+        const zoom = map.getZoom();
+        const showLabels = zoom >= 11;
+
+        // Update visibility of all bin labels
+        document.querySelectorAll('.bin-label').forEach(label => {
+            const parentMarker = label._marker; // Get the associated marker
+            if (parentMarker && map.hasLayer(parentMarker)) {
+                label.style.display = showLabels ? 'block' : 'none';
+            } else {
+                label.style.display = 'none';
+            }
+        });
+    }
+
+    // Add this after your other document.ready event listeners
+    document.querySelectorAll('.collapse-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.dataset.target;
+            const content = document.getElementById(targetId);
+            if (!content) {
+                console.error(`Target content not found: ${targetId}`);
+                return;
+            }
+            
+            // Toggle collapsed class
+            content.classList.toggle('collapsed');
+            
+            // Update button text
+            btn.textContent = content.classList.contains('collapsed') ? '+' : '−';
+        });
     });
     </script>
 

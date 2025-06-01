@@ -135,6 +135,26 @@ def get_bridge(bin):
         current_app.logger.error(f"Error fetching bridge: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+@main.route("/api/bridges/<bin>", methods=["DELETE"])
+def delete_bridge(bin):
+    try:
+        bridge = Bridge.query.filter_by(bin=bin).first()
+        if not bridge:
+            return jsonify({'error': 'Bridge not found'}), 404
+            
+        db.session.delete(bridge)
+        db.session.commit()
+        
+        # Emit socket event to all connected clients
+        socketio.emit('bridge_deleted', {'bin': bin})
+        
+        return jsonify({'message': f'Bridge {bin} deleted successfully'}), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error deleting bridge: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
 # Add this to your SocketIO event handlers
 
 @socketio.on('coordinate_update')
