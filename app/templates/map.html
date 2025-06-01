@@ -163,13 +163,14 @@
 
     /* Main panel style */
     #filterPanel {
+        display: none;  /* hidden by default */
         background: white;
-        padding: 10px;
+        padding: 15px;
         border-radius: 6px;
         box-shadow: 0 1px 6px rgba(0,0,0,0.3);
-        max-height: calc(100vh - 100px);
+        max-height: calc(100vh - 150px);
         overflow-y: auto;
-        display: none; /* hidden by default on mobile */
+        width: 250px;
     }
 
     /* Always show panel on desktop */
@@ -191,12 +192,12 @@
 
     /* Due Soon Panel */
     #dueSoonPanel {
-        display: none;
+        display: none;  /* hidden by default */
         background: white;
-        padding: 10px;
+        padding: 15px;
         border-radius: 6px;
-        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.2);
-        font-size: 14px;
+        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+        width: 250px;
     }
 
     #dueSoonPanel input {
@@ -439,6 +440,7 @@
     const binToMarker = {};    
     const allMarkers = [];     
     const socket = io();       // Initialize Socket.IO connection
+    let isDueSoonActive = false;
 
     function createMarkerIcon(color) {
         return L.divIcon({
@@ -637,8 +639,9 @@
 
     // Update markers based on current filters
     function updateMarkers() {
-        let visibleCount = 0;
+        if (isDueSoonActive) return; // Don't update if Due Soon is active
 
+        let visibleCount = 0;
         allMarkers.forEach(({ marker, data }) => {
             if (passesFilters(data)) {
                 if (!map.hasLayer(marker)) map.addLayer(marker);
@@ -653,18 +656,119 @@
     }
 
     document.addEventListener("DOMContentLoaded", function () {
-        // Initialize map first
-        map = L.map('map').setView([43.0, -75.0], 7);
-        
-        // Initialize markers layer group after map is created
-        markersGroup = L.layerGroup().addTo(map);
+    // Initialize map first
+    map = L.map('map').setView([43.0, -75.0], 7);
+    
+    // Initialize markers layer group after map is created
+    markersGroup = L.layerGroup().addTo(map);
 
-        map.on('zoomend', updateBinLabelVisibility);
+    map.on('zoomend', updateBinLabelVisibility);
+    
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Panel toggle setup
+    const filterToggleBtn = document.getElementById("filterToggleBtn");
+    const dueSoonToggleBtn = document.getElementById("dueSoonToggleBtn");
+    const filterPanel = document.getElementById("filterPanel");
+    const dueSoonPanel = document.getElementById("dueSoonPanel");
+
+    // Filter panel toggle
+    filterToggleBtn.addEventListener("click", () => {
+        if (isDueSoonActive) {
+            alert("Please clear 'Due Soon' filter before using other filters");
+            return;
+        }
+
+        const isVisible = filterPanel.style.display === "block";
+        filterPanel.style.display = isVisible ? "none" : "block";
+        dueSoonPanel.style.display = "none";
         
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
+        filterToggleBtn.textContent = isVisible ? "🔽 Filters" : "🔼 Filters";
+        dueSoonToggleBtn.textContent = "🔽 Due Soon";
+    });
+
+    // Due Soon panel toggle
+    dueSoonToggleBtn.addEventListener("click", () => {
+        const isVisible = dueSoonPanel.style.display === "block";
+        dueSoonPanel.style.display = isVisible ? "none" : "block";
+        filterPanel.style.display = "none";
         
+        dueSoonToggleBtn.textContent = isVisible ? "🔽 Due Soon" : "🔼 Due Soon";
+        filterToggleBtn.textContent = "🔽 Filters";
+    });
+
+    // Collapse toggles for filter groups
+    document.querySelectorAll('.collapse-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.dataset.target;
+            const content = document.getElementById(targetId);
+            if (!content) {
+                console.error(`Target content not found: ${targetId}`);
+                return;
+            }
+            
+            content.classList.toggle('collapsed');
+            btn.textContent = content.classList.contains('collapsed') ? '+' : '−';
+        });
+    });
+
+    // Due Soon Apply button
+    document.getElementById("applyDueSoon").addEventListener("click", () => {
+        isDueSoonActive = true;
+        const days = parseInt(document.getElementById("dueSoonDays").value, 10);
+        const today = new Date();
+
+        // Hide all markers first
+        allMarkers.forEach(({ marker }) => {
+            map.removeLayer(marker);
+        });
+
+        // Show only bridges due within the specified days
+        allMarkers.forEach(({ marker, data }) => {
+            try {
+                const inspected = data.completed && data.completed.trim() !== "";
+                if (inspected) return; // Skip inspected bridges
+
+                const dueParts = data.due.split("/");
+                const dueDate = new Date(2025, parseInt(dueParts[0]) - 1, parseInt(dueParts[1]));
+                const diffDays = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+
+                if (diffDays >= 0 && diffDays <= days) {
+                    map.addLayer(marker);
+                }
+            } catch (error) {
+                console.warn(`Error processing due date for bridge ${data.bin}:`, error);
+            }
+        });
+
+        // Update visible counter
+        const visibleCount = allMarkers.filter(({ marker }) => map.hasLayer(marker)).length;
+        document.getElementById("visibleCounter").textContent = 
+            `Visible Bridges: ${visibleCount}`;
+
+        // Close the filters panel if it's open
+        filterPanel.style.display = "none";
+        filterToggleBtn.textContent = "🔽 Filters";
+
+        updateBinLabelVisibility();
+    });
+
+    // Due Soon Clear button
+    document.getElementById("clearDueSoon").addEventListener("click", () => {
+        isDueSoonActive = false;
+        
+        // Reset to normal filter view
+        updateMarkers();
+        updateBinLabelVisibility();
+
+        // Close the due soon panel
+        dueSoonPanel.style.display = "none";
+        dueSoonToggleBtn.textContent = "🔽 Due Soon";
+    });
+
+               
         fetch('/api/bridges')
             .then(response => {
                 if (!response.ok) {
@@ -810,16 +914,6 @@
             return inspected ? "green" : scheduled ? "orange" : "blue";
         }
         
-
-    document.getElementById("filterToggleBtn").addEventListener("click", () => {
-        const panel = document.getElementById("filterPanel");
-        panel.style.display = panel.style.display === "none" ? "block" : "none";
-    });
-
-    document.getElementById("dueSoonToggleBtn").addEventListener("click", () => {
-        const panel = document.getElementById("dueSoonPanel");
-        panel.style.display = panel.style.display === "none" ? "block" : "none";
-    });
 
     const socket = io();
     
@@ -1024,23 +1118,8 @@
         });
     }
 
-    // Add this after your other document.ready event listeners
-    document.querySelectorAll('.collapse-toggle').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const targetId = btn.dataset.target;
-            const content = document.getElementById(targetId);
-            if (!content) {
-                console.error(`Target content not found: ${targetId}`);
-                return;
-            }
-            
-            // Toggle collapsed class
-            content.classList.toggle('collapsed');
-            
-            // Update button text
-            btn.textContent = content.classList.contains('collapsed') ? '+' : '−';
-        });
-    });
+
+
     </script>
 
 </body>
