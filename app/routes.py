@@ -67,7 +67,7 @@ def create_bridge():
         print(f"Successfully created bridge {bridge.bin}")
         
         # Emit new_bridge event through Socket.IO
-        socketio.emit('new_bridge', bridge_data, broadcast=True)
+        socketio.emit('new_bridge', bridge_data)
         
         return jsonify(bridge_data), 201
         

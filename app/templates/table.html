@@ -28,16 +28,33 @@
             background: #f5f5f5;
             border-top: 1px solid #ddd;
         }
-        #addBridgeBtn {
+        #addBridgeBtn, #saveBridgeBtn {
             padding: 8px 16px;
             background-color: #4CAF50;
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            margin-right: 10px;
         }
         #addBridgeBtn:hover {
             background-color: #45a049;
+        }
+        #saveBridgeBtn {
+            padding: 8px 16px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        #saveBridgeBtn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #saveBridgeBtn:hover:not(:disabled) {
+            background-color: #1976D2;
         }
     </style>
 </head>
@@ -45,11 +62,13 @@
     <div id="hot"></div>
     <div class="controls">
         <button id="addBridgeBtn">Add New Bridge</button>
+        <button id="saveBridgeBtn" disabled>Save Bridge</button>
     </div>
 
     <script>
         const container = document.getElementById('hot');
         let hot;
+        let isAddingNewBridge = false;
 
         // Initialize Socket.IO
         const socket = io();
@@ -99,7 +118,7 @@
                 ];
 
                 hot = new Handsontable(container, {
-                    data: [...data, {}],  // Add empty object for new row
+                    data: data,  // Remove the {...data, {}} to not add empty row
                     columns: columns,
                     colHeaders: columns.map(c => c.data.toUpperCase()),
                     rowHeaders: true,
@@ -113,6 +132,11 @@
                         
                         changes.forEach(([row, prop, oldValue, newValue]) => {
                             if (oldValue === newValue) return;
+                            
+                            // If we're adding a new bridge and this is the last row, don't try to PATCH
+                            if (isAddingNewBridge && row === hot.countRows() - 1) {
+                                return;
+                            }
                             
                             const rowData = this.getSourceDataAtRow(row);
                             const bin = rowData.bin;
@@ -145,13 +169,39 @@
 
                 // Add New Bridge button handler
                 document.getElementById('addBridgeBtn').addEventListener('click', () => {
+                    isAddingNewBridge = true;
+                    const currentData = hot.getSourceData();
+                    hot.loadData([...currentData, {}]);
+                    
+                    const newRowIndex = hot.countRows() - 1;
+                    hot.selectCell(newRowIndex, 0);
+                });
+
+                const saveBridgeBtn = document.getElementById('saveBridgeBtn');
+
+                // Enable/disable save button based on required fields
+                hot.addHook('afterChange', (changes, source) => {
+                    if (!changes || source === 'loadData') return;
+                    
+                    const lastRow = hot.countRows() - 1;
+                    const lastRowData = hot.getSourceDataAtRow(lastRow);
+                    
+                    const hasRequiredFields = lastRowData.bin && 
+                                            lastRowData.lat && 
+                                            lastRowData.lon;
+                    
+                    saveBridgeBtn.disabled = !hasRequiredFields;
+                });
+
+                // Save Bridge button handler
+                saveBridgeBtn.addEventListener('click', () => {
                     const lastRow = hot.countRows() - 1;
                     const newRowData = hot.getSourceDataAtRow(lastRow);
                     
-                    // Check if all required fields are filled
-                    const requiredFields = ['bin', 'lat', 'lon']
+                    // Validate required fields
+                    const requiredFields = ['bin', 'lat', 'lon'];
                     const missingFields = requiredFields.filter(field => 
-                        !newRowData[field] || newRowData[field].trim() === ''
+                        !newRowData[field] || String(newRowData[field]).trim() === ''
                     );
 
                     if (missingFields.length > 0) {
@@ -162,10 +212,10 @@
                     // Prepare new bridge data
                     const newBridge = {
                         bin: newRowData.bin,
-                        lat: newRowData.lat || 0,  // Use the entered lat or default to 0
-                        lon: newRowData.lon || 0,  // Use the entered lon or default to 0
-                        region: newRowData.region,
-                        county: newRowData.county,
+                        lat: newRowData.lat,
+                        lon: newRowData.lon,
+                        region: newRowData.region || '',
+                        county: newRowData.county || '',
                         due: newRowData.due || '',
                         completed: newRowData.completed || '',
                         week: newRowData.week || '',
@@ -186,26 +236,35 @@
 
                     // Post new bridge to API
                     fetch('/api/bridges', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        method: 'POST',  // Make sure method is specified
+                        headers: {
+                            'Content-Type': 'application/json'  // Specify content type
+                        },
                         body: JSON.stringify(newBridge)
                     })
                     .then(res => {
-                        if (!res.ok) return res.json().then(err => { throw new Error(err.error); });
+                        if (!res.ok) {
+                            return res.json().then(err => {
+                                throw new Error(err.message || 'Failed to save bridge');
+                            });
+                        }
                         return res.json();
                     })
                     .then(result => {
                         console.log('Created new bridge:', result);
                         // Refresh the table data
+                        isAddingNewBridge = false;  // Reset flag before refreshing
                         return fetch('/api/bridges');
                     })
                     .then(res => res.json())
                     .then(data => {
-                        hot.loadData([...data, {}]);  // Keep empty row at end
+                        hot.loadData(data);
+                        saveBridgeBtn.disabled = true;
+                        alert('Bridge saved successfully!');
                     })
                     .catch(err => {
                         console.error('Error creating bridge:', err);
-                        alert(err.message);
+                        alert(`Failed to save bridge: ${err.message}`);
                     });
                 });
             });

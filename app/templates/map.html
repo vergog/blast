@@ -404,10 +404,10 @@
     </script>
     <script>
     // Initialize global variables
-    const markers = new Map();  // Store markers by BIN
-    const binToMarker = {};    // Keep existing binToMarker if you have it
-    const allMarkers = [];     // Add this for storing all markers
-    let map;                   // Keep existing map declaration
+    let map; 
+    let markersGroup;
+    const binToMarker = {};    
+    const allMarkers = [];     
     const socket = io();       // Initialize Socket.IO connection
 
     function createMarkerIcon(color) {
@@ -528,8 +528,11 @@
     }
 
     document.addEventListener("DOMContentLoaded", function () {
-        // Change this line to use the global map variable
+        // Initialize map first
         map = L.map('map').setView([43.0, -75.0], 7);
+        
+        // Initialize markers layer group after map is created
+        markersGroup = L.layerGroup().addTo(map);
         
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors'
@@ -669,15 +672,6 @@
         }
     });
 
-        socket.on('bridge_update', (data) => {
-            if (data.lat && data.lon) {
-                // Update marker position on map
-                const marker = markers[data.bin];
-                if (marker) {
-                    marker.setLatLng([data.lat, data.lon]);
-                }
-            }
-        });
     }); // Close DOMContentLoaded event listener
 
     // Update the updateLabelVisibility function to use the global map
@@ -740,6 +734,50 @@
         sidebar.classList.remove('open');
         overlay.style.display = 'none';
     }
+
+    // Add this with your other Socket.IO listeners after socket initialization
+    socket.on('new_bridge', (newBridge) => {
+        console.log('New bridge received:', newBridge);
+        
+        // Create marker with proper icon
+        const marker = L.marker([newBridge.lat, newBridge.lon], {
+            icon: createMarkerIcon(getMarkerColor(newBridge))
+        }).addTo(map);
+
+        // Add popup
+        marker.bindPopup(`
+            <span style="font-size:16px;"><b><u>${newBridge.bin}</u></b></span><br>
+            <b>Coordinates:</b> <a href="https://www.google.com/maps/dir/?api=1&destination=${newBridge.lat},${newBridge.lon}" target="_blank" style="color:#1976d2;">${newBridge.lat.toFixed(4)}, ${newBridge.lon.toFixed(4)}</a><br>
+            <b>New Standards:</b> ${newBridge.stds}<br>
+            <b>Due Date:</b> ${newBridge.due}/25<br>
+            <b>Active Flags:</b> ${newBridge.flags}<br>
+            <b>Load Posting:</b> ${newBridge.posting_label}<br>
+            <a href="#" onclick="showModal('${newBridge.bin}'); return false;">See more…</a>
+        `);
+
+        // Add the marker to the layer group
+        markersGroup.addLayer(marker);
+
+        // Store the marker reference
+        binToMarker[newBridge.bin] = marker;
+        marker.bridgeData = newBridge;
+
+        // Add label
+        const label = L.marker([newBridge.lat, newBridge.lon], {
+            icon: L.divIcon({
+                className: 'bin-label',
+                html: newBridge.bin,
+                iconSize: null
+            }),
+            interactive: false
+        }).addTo(map);
+
+        // Add to allMarkers array for tracking
+        allMarkers.push({ marker, data: newBridge });
+
+        // Update markers count
+        updateMarkers();
+    });
     </script>
 
 </body>
