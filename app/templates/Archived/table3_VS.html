@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Bridge Table (JSpreadsheet)</title>
+    
+    <!-- JSpreadsheet CE -->
+    <script src="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@4.10.1/dist/index.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@4.10.1/dist/jspreadsheet.min.css" />
+    
+    <!-- JSuites -->
+    <script src="https://cdn.jsdelivr.net/npm/jsuites@4.17.3/dist/jsuites.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsuites@4.17.3/dist/jsuites.min.css" />
+    
+    <!-- Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+
+    <style>
+        body { font-family: sans-serif; }
+        #spreadsheet { margin: 20px; }
+    </style>
+</head>
+<body>
+    <h1 style="text-align:center;">Bridge Table (JSpreadsheet)</h1>
+    <div id="spreadsheet"></div>
+
+    <script>
+        // Initialize Socket.IO
+        const socket = io();
+        let jss; // Store spreadsheet instance globally
+
+        socket.on('connect', () => {
+            console.log('Connected to Socket.IO server');
+        });
+
+        // Handle bridge updates from other clients
+        socket.on('bridge_update', function(updatedBridge) {
+            console.log('Received bridge update:', updatedBridge);
+            if (jss) {
+                // Find the row with matching BIN
+                const rows = jss.getData();
+                const rowIndex = rows.findIndex(row => row[0] === updatedBridge.bin);
+                if (rowIndex !== -1) {
+                    // Update the row data
+                    const newData = [
+                        updatedBridge.bin,
+                        updatedBridge.county || '',
+                        updatedBridge.region || '',
+                        updatedBridge.status || '',
+                        updatedBridge.due || '',
+                        updatedBridge.completed || '',
+                        updatedBridge.spans || '',
+                        updatedBridge.access_info || '',
+                        updatedBridge.flags_info || '',
+                        updatedBridge.posting_info || '',
+                        updatedBridge.spe || '',
+                        updatedBridge.stds || '',
+                        updatedBridge.field_time || ''
+                    ];
+                    jss.setRowData(rowIndex, newData);
+                    console.log('Updated row:', rowIndex);
+                }
+            }
+        });
+
+        // Initialize JSpreadsheet
+        fetch('/api/bridges')
+            .then(res => res.json())
+            .then(data => {
+                console.log('Loaded bridge data:', data.length, 'bridges');
+                
+                const rows = data.map(b => [
+                    b.bin,
+                    b.county || '',
+                    b.region || '',
+                    b.due || '',
+                    b.completed || '',
+                    b.spans || '',
+                    b.access_info || '',
+                    b.flags_info || '',
+                    b.posting_info || '',
+                    b.spe || '',
+                    b.stds || '',
+                    b.field_time || ''
+                ]);
+
+                jss = jexcel(document.getElementById('spreadsheet'), {
+                    data: rows,
+                    columns: [
+                        { type: 'text', title: 'BIN', width: 100, readOnly: true },
+                        { type: 'text', title: 'County', width: 120 },
+                        { type: 'text', title: 'Region', width: 100 },
+                        { type: 'text', title: 'Due Date', width: 100 },
+                        { type: 'text', title: 'Completed', width: 100 },
+                        { type: 'text', title: 'Spans', width: 80 },
+                        { type: 'text', title: 'Access Info', width: 150 },
+                        { type: 'text', title: 'Flags Info', width: 150 },
+                        { type: 'text', title: 'Posting Info', width: 150 },
+                        { type: 'text', title: 'SPE', width: 80 },
+                        { type: 'text', title: 'STDS', width: 80 },
+                        { type: 'text', title: 'Field Time', width: 100 },
+                    ],
+                    minDimensions: [13, 10],
+                    allowInsertRow: true,
+                    allowDeleteRow: true,
+                    onchange: function(instance, cell, x, y, value) {
+        // Get current row data
+        const bin = instance.jexcel.getValueFromCoords(0, y);
+        const oldValue = cell.oldValue || '';
+        
+        // Map column indices to field names
+        const fieldMap = [
+            null, 'county', 'region', 'due', 'completed',
+            'spans', 'access_info', 'flags_info', 'posting_info',
+            'spe', 'stds', 'field_time'
+        ];
+        const field = fieldMap[x];
+
+        // Don't process if it's the BIN column or no real change
+        if (!field || x === 0 || value === oldValue) {
+            return;
+        }
+
+        // Prevent empty values, revert to old value if empty
+        if (!value || value.trim() === '') {
+            console.log('Empty value not allowed, reverting to:', oldValue);
+            instance.jexcel.setValueFromCoords(x, y, oldValue);
+            return;
+        }
+
+        console.log(`Updating ${bin}: ${field} from "${oldValue}" to "${value}"`);
+
+        fetch(`/api/bridges/${bin}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [field]: value })
+        })
+        .then(res => {
+            if (!res.ok) throw new Error('Update failed');
+            return res.json();
+        })
+        .then(result => {
+            console.log('Update successful:', result);
+            // Update only the changed cell
+            instance.jexcel.setValueFromCoords(x, y, result[field] || '');
+        })
+        .catch(err => {
+            console.error('Update error:', err);
+            alert('Update failed: ' + err.message);
+            // Revert only the changed cell
+            instance.jexcel.setValueFromCoords(x, y, oldValue);
+        });
+    },
+    
+    // Add these options to prevent accidental data loss
+    allowDeleteColumn: false,
+    allowRenameColumn: false,
+    columnDrag: false,
+    columnResize: true,
+    rowResize: false,
+    wordWrap: true
+                });
+            })
+            .catch(err => {
+                console.error('Error loading bridge data:', err);
+                alert('Failed to load bridge data');
+            });
+    </script>
+</body>
+</html>

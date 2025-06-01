@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bridge Table (Tabulator)</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- Tabulator -->
+    <link href="https://unpkg.com/tabulator-tables@5.5.0/dist/css/tabulator.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/tabulator-tables@5.5.0/dist/js/tabulator.min.js"></script>
+
+    <!-- Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+
+    <style>
+        #bridge-table {
+            margin: 20px;
+            height: calc(100vh - 40px);
+        }
+    </style>
+</head>
+<body>
+    <div id="bridge-table"></div>
+
+    <script>
+        // Initialize Socket.IO
+        const socket = io();
+        let table; // Define table in wider scope
+
+        socket.on('connect', () => {
+            console.log('Connected to Socket.IO server');
+        });
+
+        // Socket.IO update handler
+        socket.on('bridge_update', function(updatedBridge) {
+            console.log('Received bridge update:', updatedBridge);
+            if (table) {
+                const row = table.getRows().find(r => r.getData().bin === updatedBridge.bin);
+                if (row) {
+                    row.update(updatedBridge);
+                    console.log('Updated table row for bridge:', updatedBridge.bin);
+                }
+            }
+        });
+
+        // Initialize Tabulator
+        fetch('/api/bridges')
+            .then(response => response.json())
+            .then(data => {
+                console.log('Loaded bridge data:', data.length, 'bridges');
+                
+                table = new Tabulator("#bridge-table", {
+                    data: data,
+                    height: "100%",
+                    layout: "fitColumns",
+                    responsiveLayout: "hide",
+                    pagination: "local",
+                    paginationSize: 50,
+                    columns: [
+                        { title: "BIN", field: "bin", width: 100 },
+                        { title: "Region", field: "region", editor: "input" },
+                        { title: "County", field: "county", editor: "input" },
+                        { title: "Due Date", field: "due", editor: "input" },
+                        { title: "Completed", field: "completed", editor: "input" },
+                        { title: "Week", field: "week", editor: "input" },
+                        { title: "Flags", field: "flags", editor: "input" },
+                        { title: "Posting", field: "posting", editor: "input" },
+                        { title: "Access", field: "access", editor: "input" },
+                        { title: "SPE", field: "spe", editor: "input" },
+                        { title: "STDS", field: "stds", editor: "input" },
+                        { title: "Field Time", field: "field_time", editor: "input" }
+                    ],
+                    cellEdited: function(cell) {
+                        const row = cell.getRow();
+                        const data = row.getData();
+                        const field = cell.getField();
+                        const value = cell.getValue();
+                        const oldValue = cell.getOldValue();
+
+                        console.log(`Attempting to update ${data.bin}: ${field} from "${oldValue}" to "${value}"`);
+
+                        fetch(`/api/bridges/${data.bin}`, {
+                            method: 'PATCH',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ [field]: value })
+                        })
+                        .then(res => {
+                            if (!res.ok) {
+                                return res.json().then(err => { throw new Error(err.error || 'Update failed'); });
+                            }
+                            return res.json();
+                        })
+                        .then(result => {
+                            console.log('Update successful:', result);
+                        })
+                        .catch(err => {
+                            console.error('Update error:', err);
+                            cell.restoreOldValue();
+                            alert(`Failed to update: ${err.message}`);
+                        });
+                    }
+                });
+            })
+            .catch(err => {
+                console.error('Error loading bridge data:', err);
+                alert('Failed to load bridge data');
+            });
+    </script>
+</body>
+</html>

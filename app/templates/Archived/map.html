@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bridge Map</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link 
+      rel="stylesheet" 
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <style>
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+        #sidebarOverlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.3);
+            z-index: 999;
+        }
+        #sidebar {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 350px;
+            height: 100%;
+            background-color: #fff;
+            box-shadow: -2px 0 6px rgba(0, 0, 0, 0.2);
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+            overflow-y: auto;
+            padding: 16px;
+            font-family: sans-serif;
+        }
+
+        #sidebar.open {
+            transform: translateX(0);
+        }
+
+        #sidebarContent {
+            font-size: 14px;
+        }
+        #binSearchWrapper {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1100;
+            background: white;
+            padding: 6px 10px;
+            border-radius: 6px;
+            box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+        }
+        #binSearchInput {
+            width: 160px;
+        }
+        #filterPanel {
+            position: absolute;
+            top: 60px;
+            left: 10px;
+            z-index: 1100;
+            background: white;
+            padding: 10px;
+            border-radius: 6px;
+            box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+            max-width: 260px;
+            font-family: sans-serif;
+            font-size: 14px;
+        }
+
+        #filterPanel label {
+            display: block;
+            margin: 2px 0;
+        }
+        .bin-label {
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 2px 4px;
+            border-radius: 4px;
+            white-space: nowrap;
+            text-align: center;
+            text-shadow: 1px 1px 2px black;
+            display: none; /* hidden by default */
+        }
+
+
+
+    </style>
+</head>
+
+
+
+
+
+
+
+<body>
+    <div id="binSearchWrapper">
+        <input type="text" id="binSearchInput" list="binList" placeholder="Search BIN..." />
+        <datalist id="binList"></datalist>
+    </div>
+
+    <div id="filterPanel">
+        <div class="filter-group">
+            <h4>Inspection Status</h4>
+            <label><input type="checkbox" class="filter-checkbox" data-group="status" value="Assigned" checked> Assigned</label>
+            <label><input type="checkbox" class="filter-checkbox" data-group="status" value="Scheduled" checked> Scheduled</label>
+            <label><input type="checkbox" class="filter-checkbox" data-group="status" value="Inspected" checked> Inspected</label>
+        </div>
+
+        <div class="filter-group" id="filter-flags"></div>
+        <div class="filter-group" id="filter-posting"></div>
+        <div class="filter-group" id="filter-access"></div>
+        <div class="filter-group" id="filter-week"></div>
+        <div class="filter-group" id="filter-due-month"></div>
+    </div>
+
+
+    <div id="map"></div>
+    <div id="sidebarOverlay" onclick="closeSidebar()"></div>
+    <div id="sidebar">
+        <div id="sidebarContent"></div>
+    </div>
+
+
+    <script 
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
+    </script>
+    <script>
+        const map = L.map('map').setView([43.0, -75.0], 7);
+        const filters = {
+            status: new Set(["Assigned", "Scheduled", "Inspected"]),
+            flags: new Set(),
+            posting: new Set(),
+            access: new Set(),
+            week: new Set(),
+            due_month: new Set()
+        };
+        const binToMarker = {};
+
+
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        fetch("/api/bridges")
+            .then(res => res.json())
+            .then(data => {
+
+                data.forEach(b => {
+                    if (b.lat && b.lon) {
+                        let color = "blue"; // default: Assigned
+                        if (b.status === "Scheduled") color = "orange";
+                        if (b.status === "Inspected") color = "green";
+
+                        const marker = L.circleMarker([b.lat, b.lon], {
+                            radius: 6,
+                            fillColor: color,
+                            color: "#333",
+                            weight: 1,
+                            opacity: 1,
+                            fillOpacity: 0.8,
+                            icon: L.divIcon({
+                                className: 'bin-label',
+                                html: b.bin,
+                                iconSize: null
+                            })
+                        }).addTo(map);
+
+                        const popupHtml = `
+                            <b>${b.bin}</b><br>
+                            ${b.county}, ${b.region}<br>
+                            Status: ${b.status}<br>
+                            Due: ${b.due || 'N/A'}<br>
+                            <a href="#" onclick="showDetails('${b.bin}'); return false;">See more info</a>
+                        `;
+
+                        marker.bindPopup(popupHtml);
+                        marker.bridgeData = b;
+                        binToMarker[b.bin] = marker;
+
+                    }
+                });
+                function createCheckboxes(containerId, key, values) {
+                    const container = document.getElementById(containerId);
+                    values.forEach(v => {
+                        const label = document.createElement("label");
+                        label.innerHTML = `<input type="checkbox" class="filter-checkbox" data-group="${key}" value="${v}" checked> ${v}`;
+                        container.appendChild(label);
+                        filters[key].add(v); // initialize to all selected
+                    });
+                }
+
+                // Build unique value sets
+                const unique = {
+                    flags: new Set(),
+                    posting: new Set(),
+                    access: new Set(),
+                    week: new Set(),
+                    due_month: new Set()
+                };
+
+                data.forEach(b => {
+                    unique.flags.add(b.flags);
+                    unique.posting.add(b.posting);
+                    unique.access.add(b.access);
+                    unique.week.add(b.week);
+                    unique.due_month.add(b.due_month);
+                });
+
+                // Add checkboxes dynamically
+                createCheckboxes("filter-flags", "flags", Array.from(unique.flags));
+                createCheckboxes("filter-posting", "posting", Array.from(unique.posting));
+                createCheckboxes("filter-access", "access", Array.from(unique.access));
+                createCheckboxes("filter-week", "week", Array.from(unique.week));
+                createCheckboxes("filter-due-month", "due_month", Array.from(unique.due_month));
+
+                document.querySelectorAll(".filter-checkbox").forEach(cb => {
+                    const group = cb.dataset.group;
+                    const val = cb.value;
+
+                    cb.addEventListener("change", () => {
+                        if (cb.checked) {
+                            filters[group].add(val);
+                        } else {
+                            filters[group].delete(val);
+                        }
+                        updateMarkers();
+                    });
+                });
+
+
+                const input = document.getElementById("binSearchInput");
+                const datalist = document.getElementById("binList");
+
+                input.addEventListener("input", function () {
+                    const value = input.value.trim();
+                    datalist.innerHTML = "";
+
+                    if (value.length >= 3) {
+                        const matches = data
+                            .filter(({ bin }) => bin.startsWith(value))
+                            .slice(0, 50);
+
+                        matches.forEach(({ bin }) => {
+                            const opt = document.createElement("option");
+                            opt.value = bin;
+                            datalist.appendChild(opt);
+                        });
+                    }
+                });
+
+                input.addEventListener("change", function () {
+                    const value = input.value.trim();
+                    const marker = binToMarker[value];
+
+                    if (marker) {
+                        map.setView(marker.getLatLng(), 16);
+                        marker.openPopup();
+                    } else {
+                        alert("BIN not found on map.");
+                    }
+                });
+
+            });
+            function openSidebar(html) {
+                document.getElementById("sidebarContent").innerHTML = html;
+                document.getElementById("sidebar").classList.add("open");
+                document.getElementById("sidebarOverlay").style.display = "block";
+            }
+
+            function closeSidebar() {
+                document.getElementById("sidebar").classList.remove("open");
+                document.getElementById("sidebarOverlay").style.display = "none";
+            }
+            function showDetails(bin) {
+                fetch("/api/bridges")
+                    .then(res => res.json())
+                    .then(data => {
+                        const b = data.find(item => item.bin === bin);
+                        if (!b) return;
+
+                        const html = `
+                            <h2>${b.bin}</h2>
+                            <p><b>County:</b> ${b.county}<br>
+                            <b>Region:</b> ${b.region}<br>
+                            <b>Status:</b> ${b.status}<br>
+                            <b>Due Date:</b> ${b.due || 'N/A'}<br>
+                            <b>Completed:</b> ${b.completed || 'No'}<br>
+                            <b>Spans:</b> ${b.spans}<br>
+                            <b>Flags:</b> ${b.flags_info}<br>
+                            <b>Load Posting:</b> ${b.posting_info}<br>
+                            <b>Access:</b> ${b.access_info}<br>
+                            <b>Special Emphasis:</b> ${b.spe}<br>
+                            <b>New Standards:</b> ${b.stds}<br>
+                            <b>Estimated Field Time:</b> ${b.field_time} hours</p>
+                        `;
+
+                        openSidebar(html);
+                    });
+            }
+            function passesFilters(b) {
+                return (
+                    filters.status.has(b.status) &&
+                    filters.flags.has(b.flags) &&
+                    filters.posting.has(b.posting) &&
+                    filters.access.has(b.access) &&
+                    filters.week.has(b.week) &&
+                    filters.due_month.has(b.due_month)
+                );
+            }
+            function updateMarkers() {
+                Object.entries(binToMarker).forEach(([bin, marker]) => {
+                    const b = marker.bridgeData;
+                    if (passesFilters(b)) {
+                        map.addLayer(marker);
+                    } else {
+                        map.removeLayer(marker);
+                    }
+                });
+            }
+
+
+
+    </script>
+</body>
+</html>

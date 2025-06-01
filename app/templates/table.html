@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bridge Spreadsheet View</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- Handsontable -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable@13.0.0/dist/handsontable.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/handsontable@13.0.0/dist/handsontable.min.js"></script>
+
+    <!-- Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+        #hot {
+            width: 100%;
+            height: calc(100vh - 50px);  /* Reduce height to make room for button */
+            overflow: hidden;
+        }
+        .controls {
+            padding: 10px;
+            background: #f5f5f5;
+            border-top: 1px solid #ddd;
+        }
+        #addBridgeBtn {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #addBridgeBtn:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div id="hot"></div>
+    <div class="controls">
+        <button id="addBridgeBtn">Add New Bridge</button>
+    </div>
+
+    <script>
+        const container = document.getElementById('hot');
+        let hot;
+
+        // Initialize Socket.IO
+        const socket = io();
+
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+
+        // Socket.IO update handler
+        socket.on('bridge_update', (updatedBridge) => {
+            console.log('Bridge update received:', updatedBridge);
+            if (hot) {
+                const rowIndex = findRowByBin(updatedBridge.bin);
+                if (rowIndex !== -1) {
+                    // Update using loadData to prevent triggering afterChange
+                    const currentData = hot.getSourceData();
+                    currentData[rowIndex] = {...currentData[rowIndex], ...updatedBridge};
+                    hot.loadData(currentData);
+                }
+            }
+        });
+
+        function findRowByBin(bin) {
+            const data = hot.getData();
+            return data.findIndex(row => row.bin === bin);
+        }
+
+        fetch('/api/bridges')
+            .then(res => res.json())
+            .then(data => {
+                const columns = [
+                    { data: 'bin', readOnly: false },
+                    { data: 'lat', readOnly: false },
+                    { data: 'lon', readOnly: false},
+                    { data: 'region', readOnly: false },
+                    { data: 'county', readOnly: false },
+                    { data: 'due', readOnly: false },
+                    { data: 'completed', readOnly: false },
+                    { data: 'week', readOnly: false },
+                    { data: 'flags', readOnly: false },
+                    { data: 'posting', readOnly: false },
+                    { data: 'access', readOnly: false },
+                    { data: 'spe', readOnly: false },
+                    { data: 'stds', readOnly: false },
+                    { data: 'field_time', readOnly: false },
+                    { data: 'due_month', readOnly: false }
+                ];
+
+                hot = new Handsontable(container, {
+                    data: [...data, {}],  // Add empty object for new row
+                    columns: columns,
+                    colHeaders: columns.map(c => c.data.toUpperCase()),
+                    rowHeaders: true,
+                    filters: true,
+                    dropdownMenu: true,
+                    minSpareRows: 0,
+                    contextMenu: ['row_above', 'row_below', 'remove_row'],
+                    licenseKey: 'non-commercial-and-evaluation',
+                    afterChange: function(changes, source) {
+                        if (!changes || source === 'loadData' || source === 'external') return;
+                        
+                        changes.forEach(([row, prop, oldValue, newValue]) => {
+                            if (oldValue === newValue) return;
+                            
+                            const rowData = this.getSourceDataAtRow(row);
+                            const bin = rowData.bin;
+                            if (!bin) return; // Skip if no bin (empty row)
+                            
+                            fetch(`/api/bridges/${bin}`, {
+                                method: 'PATCH',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({[prop]: newValue})
+                            })
+                            .then(response => {
+                                if (!response.ok) {
+                                    throw new Error(`HTTP error! status: ${response.status}`);
+                                }
+                                return response.json();
+                            })
+                            .then(data => {
+                                console.log('Update successful:', data);
+                            })
+                            .catch(error => {
+                                console.error('Error updating bridge:', error);
+                                // Revert the change if there was an error
+                                this.setDataAtRowProp(row, prop, oldValue, 'external');
+                            });
+                        });
+                    }
+                });
+
+                // Add New Bridge button handler
+                document.getElementById('addBridgeBtn').addEventListener('click', () => {
+                    const lastRow = hot.countRows() - 1;
+                    const newRowData = hot.getSourceDataAtRow(lastRow);
+                    
+                    // Check if all required fields are filled
+                    const requiredFields = ['bin', 'lat', 'lon']
+                    const missingFields = requiredFields.filter(field => 
+                        !newRowData[field] || newRowData[field].trim() === ''
+                    );
+
+                    if (missingFields.length > 0) {
+                        alert(`Please fill in all required fields: ${missingFields.join(', ')}`);
+                        return;
+                    }
+
+                    // Prepare new bridge data
+                    const newBridge = {
+                        bin: newRowData.bin,
+                        lat: newRowData.lat || 0,  // Use the entered lat or default to 0
+                        lon: newRowData.lon || 0,  // Use the entered lon or default to 0
+                        region: newRowData.region,
+                        county: newRowData.county,
+                        due: newRowData.due || '',
+                        completed: newRowData.completed || '',
+                        week: newRowData.week || '',
+                        flags: newRowData.flags || '',
+                        flags_info: '',
+                        posting: newRowData.posting || '',
+                        posting_info: '',
+                        access: newRowData.access || '',
+                        access_info: '',
+                        spe: newRowData.spe || '',
+                        stds: newRowData.stds || '',
+                        field_time: newRowData.field_time || '',
+                        due_month: newRowData.due_month || '',
+                        spans: '',
+                        prev_gr: '',
+                        issued: ''
+                    };
+
+                    // Post new bridge to API
+                    fetch('/api/bridges', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(newBridge)
+                    })
+                    .then(res => {
+                        if (!res.ok) return res.json().then(err => { throw new Error(err.error); });
+                        return res.json();
+                    })
+                    .then(result => {
+                        console.log('Created new bridge:', result);
+                        // Refresh the table data
+                        return fetch('/api/bridges');
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        hot.loadData([...data, {}]);  // Keep empty row at end
+                    })
+                    .catch(err => {
+                        console.error('Error creating bridge:', err);
+                        alert(err.message);
+                    });
+                });
+            });
+    </script>
+</body>
+</html>

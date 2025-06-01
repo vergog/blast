@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Bridge Table (Tabulator)</title>
+    <link href="https://unpkg.com/tabulator-tables@6.2.1/dist/css/tabulator.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/tabulator-tables@6.2.1/dist/js/tabulator.min.js"></script>
+    <!-- Add Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        #bridge-table {
+            margin: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center">Bridge Table (Tabulator)</h1>
+    <div id="bridge-table"></div>
+
+    <script>
+        // Initialize Socket.IO
+        const socket = io();
+
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+
+        // Setup the table
+        const table = new Tabulator("#bridge-table", {
+            layout: "fitColumns",
+            placeholder: "Loading bridge data...",
+            ajaxURL: "/api/bridges",
+            ajaxResponse: function(url, params, response) {
+                // Return the array directly since that's what your API returns
+                return response;
+            },
+            columns: [
+                { title: "BIN", field: "bin", editor: false },
+                { title: "County", field: "county", editor: "input" },
+                { title: "Region", field: "region", editor: "input" },
+                { title: "Due", field: "due", editor: "input" },
+                { title: "Completed", field: "completed", editor: "input" },
+                { title: "Week", field: "week", editor: "input" },
+                { title: "Spans", field: "spans", editor: "input" },
+                { title: "Access", field: "access_info", editor: "input" },
+                { title: "Flags", field: "flags_info", editor: "input" },
+                { title: "Posting", field: "posting_info", editor: "input" },
+                { title: "SPE", field: "spe", editor: "input" },
+                { title: "STDS", field: "stds", editor: "input" },
+                { title: "Field Time", field: "field_time", editor: "input" },
+            ],
+            cellEdited: function(cell) {
+                const data = cell.getRow().getData();
+                const field = cell.getField();
+                const newVal = cell.getValue();
+                const oldVal = cell.getOldValue();
+                
+                console.log(`Cell edited: ${field} changed from "${oldVal}" to "${newVal}"`); // Debug
+                
+                const update = { [field]: newVal };
+                
+                fetch(`/api/bridges/${data.bin}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(update)
+                })
+                .then(res => {
+                    console.log(`Response status: ${res.status}`); // Debug
+                    if (!res.ok) throw new Error("Save failed");
+                    return res.json();
+                })
+                .then(json => {
+                    console.log("Server response:", json); // Debug
+                    // Emit the update event
+                    socket.emit('bridge_update', json);
+                })
+                .catch(err => {
+                    console.error("Update error:", err); // Debug
+                    alert("Update error: " + err.message);
+                    cell.restoreOldValue();
+                });
+            },
+        });
+
+        // Listen for updates from other clients
+        socket.on('bridge_update', (updatedBridge) => {
+            console.log('Bridge update received:', updatedBridge);
+            // Update the table row if it exists
+            const row = table.getRows().find(r => r.getData().bin === updatedBridge.bin);
+            if (row) {
+                row.update(updatedBridge);
+            }
+        });
+
+        // Handle new row creation
+        document.addEventListener("keydown", (e) => {
+            if (e.ctrlKey && e.key === "n") {
+                e.preventDefault();
+                const newRow = { bin: "NEWBIN", county: "", region: "", due: "" };
+                fetch("/api/bridges", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(newRow)
+                }).then(res => res.json())
+                .then(json => {
+                    if (json.error) return alert(json.error);
+                    table.addData([json], true);  // Add the returned data instead of newRow
+                    socket.emit('bridge_update', json);  // Broadcast new bridge
+                });
+            }
+        });
+    </script>
+</body>
+</html>

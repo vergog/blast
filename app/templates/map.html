@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bridge Map</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Leaflet core -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- FontAwesome for marker icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+
+    <!-- Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+
+    <style>
+    /* Sidebar modal */
+    #bridgeSidebarOverlay {
+        display: none;
+        position: fixed;
+        z-index: 9998;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0,0,0,0.3);
+    }
+    #bridgeSidebar {
+        height: 100%;
+        width: 350px; /* set to your desired sidebar width */
+        position: fixed;
+        z-index: 9999;
+        top: 0;
+        right: 0;
+        background-color: #fefefe;
+        overflow-x: hidden;
+        transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+        box-shadow: -2px 0 6px rgba(0, 0, 0, 0.2);
+        transform: translateX(100%); /* hide by default */
+    }
+
+    #bridgeSidebar.open {
+        transform: translateX(0); /* slide in */
+    }
+
+    #modal-body {
+        padding: 20px;
+    }
+    @media (max-width: 500px) {
+        #bridgeSidebar {
+            width: 250px;
+        }
+    }
+
+
+    /* BIN label style */
+    .bin-label {
+        font-size: 12px;
+        font-weight: bold;
+        color: white;
+        background-color: rgba(0, 0, 0, 0.6);
+        padding: 2px 4px;
+        border-radius: 4px;
+        text-align: center;
+        white-space: nowrap;
+        display: none; /* toggled on zoom */
+    }
+
+
+    /* Searchbar */
+    #binSearchWrapper {
+        position: absolute;
+        top: 10px;
+        left: 50px;
+        z-index: 9999;
+        background: white;
+        padding: 6px 10px;
+        border-radius: 6px;
+        box-shadow: 0 1px 6px rgba(0,0,0,0.3);
+    }
+    #binSearchInput {
+        width: 160px;
+    }
+
+
+    /* Toggles */
+    #panelHeaderWrapper {
+        position: absolute;
+        top: 80px;
+        left: 10px;
+        z-index: 9999;
+        display: flex;
+        gap: 10px;
+    }
+    .toggle-panel-btn {
+        background-color: #ffffff;
+        border: 1px solid #ccc;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 13px;
+        cursor: pointer;
+        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+    }
+
+
+    /* Filter Panel */
+    #filterPanelWrapper,
+    #dueSoonPanelWrapper {
+        position: absolute;
+        top: 115px;
+        left: 10px;
+        z-index: 9998;
+        max-width: 265px;
+    }
+
+    #filterToggleBtn {
+        background-color: #ffffff;
+        border: 1px solid #ccc;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 13px;
+        cursor: pointer;
+        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+    }
+    .toggle-btn {
+        font-size: 11px;
+        margin-left: 8px;
+        padding: 2px 6px;
+        background: #eee;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .filter-group.collapsible .filter-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .collapse-toggle {
+        background: none;
+        border: none;
+        font-weight: bold;
+        font-size: 14px;
+        cursor: pointer;
+        color: #333;
+        margin-left: 8px;
+    }
+    .filter-group.collapsed label {
+        display: none;
+    }
+    .filter-group .collapsible-content.collapsed {
+        display: none !important;
+    }
+    .filter-group .filter-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 5px;
+    }
+
+
+    /* Main panel style */
+    #filterPanel {
+        background: white;
+        padding: 10px;
+        border-radius: 6px;
+        box-shadow: 0 1px 6px rgba(0,0,0,0.3);
+        max-height: calc(100vh - 100px);
+        overflow-y: auto;
+        display: none; /* hidden by default on mobile */
+    }
+
+    /* Always show panel on desktop */
+    @media (min-width: 768px) {
+    }
+
+    /* Force one checkbox per line */
+    #filterPanel label {
+        display: block;
+        margin: 2px 0;
+        font-size: 13px;
+        white-space: nowrap;
+    }
+
+    /* Make sure each filter category container behaves vertically */
+    #filterPanel div[id^="filter-"] {
+        display: block;
+    }
+
+    /* Due Soon Panel */
+    #dueSoonPanel {
+        display: none;
+        background: white;
+        padding: 10px;
+        border-radius: 6px;
+        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.2);
+        font-size: 14px;
+    }
+
+    #dueSoonPanel input {
+        width: 40px;
+        margin: 0 5px;
+    }
+
+    @media (min-width: 768px) {
+    }
+
+    /* Map Legend */
+    #mapLegend {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      background: white;
+      padding: 8px;
+      border-radius: 4px;
+      font-family: sans-serif;
+      font-size: 14px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.3);
+    }
+
+    .legend-box {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      margin-right: 6px;
+      border-radius: 50%;
+      vertical-align: middle;
+    }
+
+    #visibleCounter {
+        position: absolute;
+        top: 81px;
+        left: 210px;
+        z-index: 9999;
+        background: white;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 13px;
+        box-shadow: 0 1px 6px rgba(0,0,0,0.3);
+    }
+
+    .collapsible-content.collapsed {
+        display: none;
+    }
+    #map {
+        height: 100vh;
+        width: 100%;
+    }
+
+    .sidebar {
+        position: fixed;
+        right: -400px;
+        top: 0;
+        width: 400px;
+        height: 100%;
+        background: white;
+        box-shadow: -2px 0 5px rgba(0,0,0,0.2);
+        transition: right 0.3s ease;
+        z-index: 1000;
+    }
+
+    .sidebar.open {
+        right: 0;
+    }
+
+    .sidebar-content {
+        padding: 20px;
+        height: 100%;
+        overflow-y: auto;
+    }
+
+    .close-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        padding: 8px 16px;
+        background: #f44336;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .close-btn:hover {
+        background: #d32f2f;
+    }
+
+    .custom-marker {
+        background: none;
+        border: none;
+    }
+
+    </style>
+</head>
+
+<body>
+    <!-- Sidebar Modal -->
+    <div id="bridgeSidebarOverlay" onclick="closeModal()"></div>
+    <div id="bridgeSidebar" class="sidebar">
+        <div class="sidebar-content">
+            <div id="modal-body"></div>
+            <button onclick="document.getElementById('bridgeSidebar').classList.remove('open')" class="close-btn">Close</button>
+        </div>
+    </div>
+
+    <!-- Searchbar -->
+    <div id="binSearchWrapper">
+        <input type="text" id="binSearchInput" list="binList" placeholder="Search BIN..." />
+        <datalist id="binList"></datalist>
+    </div>
+
+    <div id="visibleCounter">Visible Bridges: 0</div>
+
+    <!-- Filter Panel -->
+    <div id="panelHeaderWrapper">
+      <button id="filterToggleBtn" class="toggle-panel-btn">🔽 Filters</button>
+      <button id="dueSoonToggleBtn" class="toggle-panel-btn">🔽 Due Soon</button>
+    </div>
+
+    <div id="filterPanelWrapper">
+      <div id="filterPanel">
+
+        <!-- Inspection Status -->
+        <div id="filter-status" class="filter-group">
+          <strong>Inspection Status</strong>
+          <label><input type="checkbox" class="filter-checkbox status" value="Assigned" checked> Assigned</label>
+          <label><input type="checkbox" class="filter-checkbox status" value="Scheduled" checked> Scheduled</label>
+          <label><input type="checkbox" class="filter-checkbox status" value="Inspected" checked> Inspected</label>
+        </div>
+
+        <!-- Active Flags -->
+        <div class="filter-group">
+          <strong>Active Flags</strong>
+          <div id="filter-flags"></div>
+        </div>
+
+        <!-- Load Posting -->
+        <div class="filter-group">
+          <strong>Load Posting</strong>
+          <div id="filter-posting"></div>
+        </div>
+
+        <!-- Special Access -->
+        <div class="filter-group">
+          <strong>Special Access</strong>
+          <div id="filter-access"></div>
+        </div>
+
+        <!-- Field Week -->
+        <div class="filter-group">
+          <div class="filter-header">
+            <strong>Field Week</strong>
+            <div>
+              <button class="toggle-btn" data-group="week">All / None</button>
+              <button class="collapse-toggle" data-target="filter-week-content">+</button>
+            </div>
+          </div>
+          <div id="filter-week-content" class="collapsible-content collapsed">
+            <div id="filter-week-content"></div>
+          </div>
+        </div>
+          
+        <!-- Due Month -->
+        <div class="filter-group">
+          <div class="filter-header">
+            <strong>Due Month</strong>
+            <div>
+              <button class="toggle-btn" data-group="due_month">All / None</button>
+              <button class="collapse-toggle" data-target="filter-due_month-content">+</button>
+            </div>
+          </div>
+          <div id="filter-due_month-content" class="collapsible-content collapsed">
+            <div id="filter-due_month-content"></div>
+          </div>
+        </div>
+          
+
+      </div>
+    </div>
+
+    <!-- Due Soon -->
+    <div id="dueSoonPanelWrapper">
+      <div id="dueSoonPanel">
+        <label for="dueSoonDays">Show bridges due in next</label>
+        <input type="number" id="dueSoonDays" value="14" min="1" />
+        <span>days</span>
+        <button id="applyDueSoon">Apply</button>
+        <button id="clearDueSoon">Clear</button>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div id="mapLegend">
+        <div><span class="legend-box" style="background-color: blue;"></span> Assigned</div>
+        <div><span class="legend-box" style="background-color: orange;"></span> Scheduled</div>
+        <div><span class="legend-box" style="background-color: green;"></span> Inspected</div>
+    </div>
+    <div id="map"></div>
+
+    <script 
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
+    </script>
+    <script>
+    // Initialize global variables
+    const markers = new Map();  // Store markers by BIN
+    const binToMarker = {};    // Keep existing binToMarker if you have it
+    const allMarkers = [];     // Add this for storing all markers
+    let map;                   // Keep existing map declaration
+    const socket = io();       // Initialize Socket.IO connection
+
+    function createMarkerIcon(color) {
+        return L.divIcon({
+            className: 'custom-marker',
+            html: `
+                <svg width="16" height="16" viewBox="0 0 16 16">
+                    <circle cx="8" cy="8" r="7" 
+                        stroke="#333" 
+                        stroke-width="1" 
+                        fill="${color}" 
+                        fill-opacity="0.9"
+                    />
+                </svg>
+            `,
+            iconSize: [16, 16],
+            iconAnchor: [8, 8]
+        });
+    }
+
+    // Add socket connection listener
+    socket.on('connect', () => {
+        console.log('Connected to server');
+    });
+
+    // Update your Socket.IO bridge_update handler
+    socket.on('bridge_update', (updatedBridge) => {
+        console.log('Bridge update received:', updatedBridge);
+        
+        // Get the marker for this bridge
+        const marker = binToMarker[updatedBridge.bin];
+        if (!marker) return;
+
+        // Update the bridge data stored on the marker
+        marker.bridgeData = updatedBridge;
+
+        // Update marker position if lat/lon changed
+        if (updatedBridge.lat && updatedBridge.lon) {
+            marker.setLatLng([updatedBridge.lat, updatedBridge.lon]);
+        }
+
+        // Update marker color based on status
+        const inspected = updatedBridge.completed && updatedBridge.completed.trim() !== "";
+        const scheduled = !inspected && updatedBridge.week && 
+            updatedBridge.week.trim().toLowerCase() !== "unscheduled";
+        
+        let iconColor = inspected ? "green" : scheduled ? "orange" : "blue";
+        marker.setIcon(createMarkerIcon(iconColor));
+
+        // Create new popup content
+        const popup = `
+            <span style="font-size:16px;"><b><u>${updatedBridge.bin}</u></b></span><br>
+            <b>Coordinates:</b> <a href="https://www.google.com/maps/dir/?api=1&destination=${updatedBridge.lat},${updatedBridge.lon}" target="_blank" style="color:#1976d2;">${updatedBridge.lat.toFixed(4)}, ${updatedBridge.lon.toFixed(4)}</a><br>
+            <b>New Standards:</b> ${updatedBridge.stds}<br>
+            <b>Due Date:</b> ${updatedBridge.due}/25<br>
+            <b>Active Flags:</b> ${updatedBridge.flags}<br>
+            <b>Load Posting:</b> ${updatedBridge.posting_label}<br>
+            <a href="#" onclick="showModal('${updatedBridge.bin}'); return false;">See more…</a>
+        `;
+
+        // Update the popup content
+        if (marker.getPopup()) {
+            marker.getPopup().setContent(popup);
+        }
+
+        // Update sidebar if this bridge is currently shown
+        const sidebar = document.getElementById("bridgeSidebar");
+        if (sidebar.classList.contains("open")) {
+            const currentBin = document.querySelector("#modal-body")?.getAttribute("data-bin");
+            if (currentBin === updatedBridge.bin) {
+                showModal(updatedBridge.bin);  // Re-fetch and display updated data
+            }
+        }
+    });
+
+    // Helper function to determine bridge status
+    function getStatus(bridge) {
+        if (bridge.completed && bridge.completed.trim()) {
+            return "Inspected";
+        } else if (bridge.week && bridge.week.trim().toLowerCase() !== "unscheduled") {
+            return "Scheduled";
+        }
+        return "Assigned";
+    }
+
+    // Helper function to get marker color based on status
+    function getMarkerColor(status) {
+        switch (status) {
+            case "Inspected": return "green";
+            case "Scheduled": return "orange";
+            default: return "blue";
+        }
+    }
+    
+    function updateMarkers() {
+        if (!map) return;
+        
+        // Get current map bounds
+        const bounds = map.getBounds();
+        
+        // Count visible markers
+        let visibleCount = 0;
+        
+        allMarkers.forEach(({ marker, data }) => {
+            const latLng = marker.getLatLng();
+            const isInBounds = bounds.contains(latLng);
+            
+            if (isInBounds) {
+                visibleCount++;
+            }
+        });
+        
+        // Update the counter display
+        const counter = document.getElementById('visibleCounter');
+        if (counter) {
+            counter.textContent = `Visible Bridges: ${visibleCount}`;
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+        // Change this line to use the global map variable
+        map = L.map('map').setView([43.0, -75.0], 7);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        
+        fetch('/api/bridges')
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => Promise.reject(err));
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log("Received bridge data:", data); // Debug logging
+                
+                // Ensure we have an array to work with
+                const bridgeData = Array.isArray(data) ? data : [];
+                
+                // Process each bridge
+                bridgeData.forEach(bridge => {
+                    if (!bridge.lat || !bridge.lon) {
+                        console.warn(`Bridge ${bridge.bin} missing coordinates`);
+                        return;
+                    }
+
+                    // Create marker using L.marker instead of L.circleMarker
+                    const marker = L.marker([bridge.lat, bridge.lon], {
+                        icon: createMarkerIcon(getMarkerColor(bridge))
+                    }).addTo(map);
+
+                    // Add popup
+                    marker.bindPopup(`
+                        <span style="font-size:16px;"><b><u>${bridge.bin}</u></b></span><br>
+                        <b>Coordinates:</b> <a href="https://www.google.com/maps/dir/?api=1&destination=${bridge.lat},${bridge.lon}" target="_blank" style="color:#1976d2;">${bridge.lat.toFixed(4)}, ${bridge.lon.toFixed(4)}</a><br>
+                        <b>New Standards:</b> ${bridge.stds}<br>
+                        <b>Due Date:</b> ${bridge.due}/25<br>
+                        <b>Active Flags:</b> ${bridge.flags}<br>
+                        <b>Load Posting:</b> ${bridge.posting_label}<br>
+                        <a href="#" onclick="showModal('${bridge.bin}'); return false;">See more…</a>
+                    `);
+
+                    binToMarker[bridge.bin] = marker;
+                    marker.bridgeData = bridge;
+
+                    // Add label
+                    const label = L.marker([bridge.lat, bridge.lon], {
+                        icon: L.divIcon({
+                            className: 'bin-label',
+                            html: bridge.bin,
+                            iconSize: null
+                        }),
+                        interactive: false
+                    }).addTo(map);
+
+                    allMarkers.push({ marker, data: bridge });
+                });
+
+                updateLabelVisibility();
+                updateMarkers();
+            })
+            .catch(error => {
+                console.error('Error fetching bridge data:', error);
+            });
+
+        function getMarkerColor(bridge) {
+            const inspected = bridge.completed && bridge.completed.trim() !== "";
+            const scheduled = !inspected && bridge.week && 
+                bridge.week.trim() !== "" && 
+                bridge.week.trim().toLowerCase() !== "unscheduled";
+            
+            return inspected ? "green" : scheduled ? "orange" : "blue";
+        }
+        
+
+    document.getElementById("filterToggleBtn").addEventListener("click", () => {
+        const panel = document.getElementById("filterPanel");
+        panel.style.display = panel.style.display === "none" ? "block" : "none";
+    });
+
+    document.getElementById("dueSoonToggleBtn").addEventListener("click", () => {
+        const panel = document.getElementById("dueSoonPanel");
+        panel.style.display = panel.style.display === "none" ? "block" : "none";
+    });
+
+    const socket = io();
+    
+    socket.on('connect', () => {
+        console.log('Connected to server');
+    });
+
+    socket.on('bridge_update', (updatedBridge) => {
+        console.log('Bridge update received:', updatedBridge);
+        
+        // Get the marker for this bridge
+        const marker = binToMarker[updatedBridge.bin];
+        if (!marker) return;
+
+        // Update the bridge data stored on the marker
+        marker.bridgeData = updatedBridge;
+
+        // Update marker position if lat/lon changed
+        if (updatedBridge.lat && updatedBridge.lon) {
+            marker.setLatLng([updatedBridge.lat, updatedBridge.lon]);
+        }
+
+        // Update marker color based on status
+        const inspected = updatedBridge.completed && updatedBridge.completed.trim() !== "";
+        const scheduled = !inspected && updatedBridge.week && 
+            updatedBridge.week.trim().toLowerCase() !== "unscheduled";
+        
+        let iconColor = inspected ? "green" : scheduled ? "orange" : "blue";
+        marker.setIcon(createMarkerIcon(iconColor));
+
+        // Create new popup content
+        const popup = `
+            <span style="font-size:16px;"><b><u>${updatedBridge.bin}</u></b></span><br>
+            <b>Coordinates:</b> <a href="https://www.google.com/maps/dir/?api=1&destination=${updatedBridge.lat},${updatedBridge.lon}" target="_blank" style="color:#1976d2;">${updatedBridge.lat.toFixed(4)}, ${updatedBridge.lon.toFixed(4)}</a><br>
+            <b>New Standards:</b> ${updatedBridge.stds}<br>
+            <b>Due Date:</b> ${updatedBridge.due}/25<br>
+            <b>Active Flags:</b> ${updatedBridge.flags}<br>
+            <b>Load Posting:</b> ${updatedBridge.posting_label}<br>
+            <a href="#" onclick="showModal('${updatedBridge.bin}'); return false;">See more…</a>
+        `;
+
+        // Update the popup content
+        if (marker.getPopup()) {
+            marker.getPopup().setContent(popup);
+        }
+
+        // Update sidebar if this bridge is currently shown
+        const sidebar = document.getElementById("bridgeSidebar");
+        if (sidebar.classList.contains("open")) {
+            const currentBin = document.querySelector("#modal-body")?.getAttribute("data-bin");
+            if (currentBin === updatedBridge.bin) {
+                showModal(updatedBridge.bin);  // Re-fetch and display updated data
+            }
+        }
+    });
+
+        socket.on('bridge_update', (data) => {
+            if (data.lat && data.lon) {
+                // Update marker position on map
+                const marker = markers[data.bin];
+                if (marker) {
+                    marker.setLatLng([data.lat, data.lon]);
+                }
+            }
+        });
+    }); // Close DOMContentLoaded event listener
+
+    // Update the updateLabelVisibility function to use the global map
+    function updateLabelVisibility() {
+        if (!map) return; // Add safety check
+        const currentZoom = map.getZoom();
+        const showLabels = currentZoom >= 12;
+
+        document.querySelectorAll('.bin-label').forEach(label => {
+            label.style.display = showLabels ? 'block' : 'none';
+        });
+    }
+
+    // Add this to your JavaScript section
+    function showModal(bin) {
+        fetch(`/api/bridges/${bin}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(bridge => {
+                const modal = document.getElementById('bridgeSidebar');
+                const overlay = document.getElementById('bridgeSidebarOverlay');
+                const modalBody = document.getElementById('modal-body');
+                
+                modalBody.setAttribute('data-bin', bridge.bin);
+                
+                const content = `
+                    <h2>Bridge ${bridge.bin}</h2>
+                    <p><strong>Region:</strong> ${bridge.region}</p>
+                    <p><strong>County:</strong> ${bridge.county}</p>
+                    <p><strong>Due Date:</strong> ${bridge.due}/25</p>
+                    <p><strong>Completed:</strong> ${bridge.completed || 'Not completed'}</p>
+                    <p><strong>Week:</strong> ${bridge.week}</p>
+                    <p><strong>Flags:</strong> ${bridge.flags}</p>
+                    <p><strong>Flag Info:</strong> ${bridge.flags_info}</p>
+                    <p><strong>Posting:</strong> ${bridge.posting}</p>
+                    <p><strong>Access:</strong> ${bridge.access}</p>
+                    <p><strong>Access Info:</strong> ${bridge.access_info}</p>
+                    <p><strong>Special Equipment:</strong> ${bridge.spe}</p>
+                    <p><strong>Standards:</strong> ${bridge.stds}</p>
+                    <p><strong>Field Time:</strong> ${bridge.field_time}</p>
+                `;
+                
+                modalBody.innerHTML = content;
+                modal.classList.add('open');
+                overlay.style.display = 'block';
+            })
+            .catch(error => {
+                console.error('Error fetching bridge details:', error);
+            });
+    }
+
+    // Add this with your other JavaScript functions
+    function closeModal() {
+        const sidebar = document.getElementById('bridgeSidebar');
+        const overlay = document.getElementById('bridgeSidebarOverlay');
+        sidebar.classList.remove('open');
+        overlay.style.display = 'none';
+    }
+    </script>
+
+</body>
+</html>

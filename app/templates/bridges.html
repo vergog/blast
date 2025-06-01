@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bridge List</title>
+    <style>
+        table { border-collapse: collapse; width: 100%; font-family: sans-serif; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; font-size: 14px; }
+        th { background-color: #f2f2f2; }
+        tbody tr:hover { background-color: #f9f9f9; }
+    </style>
+</head>
+<body>
+    <h1>Bridge Inspection Table</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>BIN</th>
+                <th>Region</th>
+                <th>County</th>
+                <th>Due Date</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for b in bridges %}
+            <tr>
+                <td>{{ b.bin }}</td>
+                <td>{{ b.region }}</td>
+                <td>{{ b.county }}</td>
+                <td>{{ b.due }}</td>
+                <td>
+                    {% if b.completed and b.completed.strip() %}
+                        Inspected
+                    {% elif b.week != 'Unscheduled' %}
+                        Scheduled
+                    {% else %}
+                        Assigned
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>
