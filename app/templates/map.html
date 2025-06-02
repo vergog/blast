@@ -332,18 +332,6 @@
     </style>
 </head>
 
-
-
-
-
-
-
-
-
-
-
-
-
 <body>
     <!-- Sidebar Modal -->
     <div id="bridgeSidebarOverlay" onclick="closeModal()"></div>
@@ -450,17 +438,6 @@
     <!-- Map Container -->
     <div id="map"></div>
 
-
-
-
-
-
-
-
-
-
-    
-
     <script 
       src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
     </script>
@@ -495,6 +472,65 @@
     // Add socket connection listener
     socket.on('connect', () => {
         console.log('Connected to server');
+    });
+
+    // New bridge event
+    socket.on('new_bridge', (newBridge) => {
+        console.log('New bridge received:', newBridge);
+        
+        // Validate coordinates
+        if (!newBridge.lat || !newBridge.lon) {
+            console.warn(`Bridge ${newBridge.bin} missing coordinates`);
+            return;
+        }
+
+        // Get status and colors
+        const status = getBridgeStatus(newBridge);
+        const color = getMarkerColor(status);
+        const rgbaColor = color === 'blue' ? 'rgba(0, 0, 255, 0.8)' : 
+                          color === 'orange' ? 'rgba(255, 165, 0, 0.8)' : 
+                          'rgba(0, 128, 0, 0.8)';
+
+        // Create marker with proper icon
+        const marker = L.marker([newBridge.lat, newBridge.lon], {
+            icon: createMarkerIcon(color)
+        }).addTo(map);
+
+        // Create label
+        const label = L.marker([newBridge.lat, newBridge.lon], {
+            icon: L.divIcon({
+                className: 'bin-label',
+                html: `<span class="label-background" style="background-color: ${rgbaColor};">${newBridge.bin}</span>`,
+                iconSize: [0, 0],
+                iconAnchor: [-10, 8]
+            }),
+            interactive: false
+        }).addTo(map);
+
+        // Add popup
+        marker.bindPopup(`
+            <span style="font-size:16px;"><b><u>${newBridge.bin}</u></b></span><br>
+            <b>Coordinates:</b> <a href="https://www.google.com/maps/dir/?api=1&destination=${newBridge.lat},${newBridge.lon}" target="_blank" style="color:#1976d2;">${newBridge.lat.toFixed(4)}, ${newBridge.lon.toFixed(4)}</a><br>
+            <b>New Standards:</b> ${newBridge.stds}<br>
+            <b>Due Date:</b> ${newBridge.due}/25<br>
+            <b>Active Flags:</b> ${newBridge.flags}<br>
+            <b>Load Posting:</b> ${newBridge.posting_label}<br>
+            <a href="#" onclick="showModal('${newBridge.bin}'); return false;">See more…</a>
+        `);
+
+        // Store references
+        binToMarker[newBridge.bin] = marker;
+        marker.bridgeData = newBridge;
+        allMarkers.push({ marker, data: newBridge, label });
+
+        // Add to bridgeData array for filters
+        bridgeData.push(newBridge);
+
+        // Force update visibility
+        updateBinLabelVisibility();
+        updateMarkers();
+
+        console.log(`New bridge ${newBridge.bin} added successfully`);
     });
 
     // Update your Socket.IO bridge_update handler
@@ -834,12 +870,13 @@
         });
 
                 
+        // Fix the fetch call inside DOMContentLoaded
         fetch('/api/bridges')
             .then(response => {
                 if (!response.ok) {
                     return response.json().then(err => Promise.reject(err));
                 }
-                return response.json();
+                return response.json(); // Change from response.json to response.json()
             })
             .then(data => {
                 console.log("Received bridge data:", data);
@@ -1025,84 +1062,7 @@
                 console.error('Error fetching bridge data:', error);
             });
 
-            
 
-        const socket = io();
-        
-        socket.on('connect', () => {
-            console.log('Connected to server');
-        });
-
-        socket.on('coordinates_update', (data) => {
-            const foundMarker = allMarkers.find(m => m.data.bin === data.bin);
-            if (foundMarker) {
-                const { marker, label } = foundMarker;
-                const newLatLng = [data.lat, data.lon];
-                
-                // Update marker position
-                marker.setLatLng(newLatLng);
-                
-                // Update label position
-                if (label) {
-                    label.setLatLng(newLatLng);
-                }
-                
-                // Update the stored coordinates in the data
-                foundMarker.data.lat = data.lat;
-                foundMarker.data.lon = data.lon;
-            }
-        });
-
-        socket.on('bridge_update', (updatedBridge) => {
-            console.log('Bridge update received:', updatedBridge);
-            const foundMarker = allMarkers.find(m => m.data.bin === updatedBridge.bin);
-            if (foundMarker) {
-                const { marker, label } = foundMarker;
-                
-                // Update the bridge data
-                foundMarker.data = updatedBridge;
-                marker.bridgeData = updatedBridge;
-
-                // Update positions if coordinates changed
-                if (updatedBridge.lat && updatedBridge.lon) {
-                    const newLatLng = [updatedBridge.lat, updatedBridge.lon];
-                    marker.setLatLng(newLatLng);
-                    if (label) {
-                        label.setLatLng(newLatLng);
-                    }
-                }
-
-                // Update marker color based on status
-                const status = getBridgeStatus(updatedBridge);
-                const color = getMarkerColor(status);
-                marker.setIcon(createMarkerIcon(color));
-
-                // Update popup content
-                const popup = `
-                    <span style="font-size:16px;"><b><u>${updatedBridge.bin}</u></b></span><br>
-                    <b>Coordinates:</b> <a href="https://www.google.com/maps/dir/?api=1&destination=${updatedBridge.lat},${updatedBridge.lon}" target="_blank" style="color:#1976d2;">${updatedBridge.lat.toFixed(4)}, ${updatedBridge.lon.toFixed(4)}</a><br>
-                    <b>New Standards:</b> ${updatedBridge.stds}<br>
-                    <b>Due Date:</b> ${updatedBridge.due}/25<br>
-                    <b>Active Flags:</b> ${updatedBridge.flags}<br>
-                    <b>Load Posting:</b> ${updatedBridge.posting_label}<br>
-                    <a href="#" onclick="showModal('${updatedBridge.bin}'); return false;">See more…</a>
-                `;
-
-                // Update the popup content
-                if (marker.getPopup()) {
-                    marker.getPopup().setContent(popup);
-                }
-
-                // Update sidebar if this bridge is currently shown
-                const sidebar = document.getElementById("bridgeSidebar");
-                if (sidebar.classList.contains("open")) {
-                    const currentBin = document.querySelector("#modal-body")?.getAttribute("data-bin");
-                    if (currentBin === updatedBridge.bin) {
-                        showModal(updatedBridge.bin);  // Re-fetch and display updated data
-                    }
-                }
-            }
-        });
 
     }); // Close DOMContentLoaded event listener
 
@@ -1171,9 +1131,33 @@
     socket.on('new_bridge', (newBridge) => {
         console.log('New bridge received:', newBridge);
         
-        // Create marker with proper icon
+        // Validate coordinates
+        if (!newBridge.lat || !newBridge.lon) {
+            console.warn(`Bridge ${newBridge.bin} missing coordinates`);
+            return;
+        }
+
+        // Get status and colors
+        const status = getBridgeStatus(newBridge);
+        const color = getMarkerColor(status);
+        const rgbaColor = color === 'blue' ? 'rgba(0, 0, 255, 0.8)' : 
+                          color === 'orange' ? 'rgba(255, 165, 0, 0.8)' : 
+                          'rgba(0, 128, 0, 0.8)'; // green
+        
+        // Create marker with proper icon and add to map immediately
         const marker = L.marker([newBridge.lat, newBridge.lon], {
-            icon: createMarkerIcon(getMarkerColor(newBridge))
+            icon: createMarkerIcon(color)
+        }).addTo(map);
+
+        // Create label with proper styling and add to map immediately
+        const label = L.marker([newBridge.lat, newBridge.lon], {
+            icon: L.divIcon({
+                className: 'bin-label',
+                html: `<span class="label-background" style="background-color: ${rgbaColor};">${newBridge.bin}</span>`,
+                iconSize: [0, 0],
+                iconAnchor: [-10, 8]
+            }),
+            interactive: false
         }).addTo(map);
 
         // Add popup
@@ -1187,52 +1171,46 @@
             <a href="#" onclick="showModal('${newBridge.bin}'); return false;">See more…</a>
         `);
 
-        // Add the marker to the layer group
-        markersGroup.addLayer(marker);
-
-        // Store the marker reference
+        // Store references
         binToMarker[newBridge.bin] = marker;
         marker.bridgeData = newBridge;
+        allMarkers.push({ marker, data: newBridge, label });
 
-        // Add label
-        const label = L.marker([newBridge.lat, newBridge.lon], {
-            icon: L.divIcon({
-                className: 'bin-label',
-                html: newBridge.bin,
-                iconSize: null
-            }),
-            interactive: false
-        }).addTo(map);
+        // Add to bridgeData array for filters
+        bridgeData.push(newBridge);
 
-        // Add to allMarkers array for tracking
-        allMarkers.push({ marker, data: newBridge });
-
-        // Update markers count
+        // Force update visibility based on current zoom level
+        updateBinLabelVisibility();
         updateMarkers();
+
+        console.log(`New bridge ${newBridge.bin} added successfully`);
     });
 
     // Add this with your other Socket.IO listeners
     socket.on('bridge_deleted', (data) => {
         console.log('Bridge deleted:', data.bin);
         
-        // Get the marker for this bridge
-        const marker = binToMarker[data.bin];
-        if (!marker) return;
-
-        // Remove the marker from the map
-        map.removeLayer(marker);
-        
-        // Remove from binToMarker object
-        delete binToMarker[data.bin];
-        
-        // Remove from allMarkers array
-        const markerIndex = allMarkers.findIndex(m => m.data.bin === data.bin);
-        if (markerIndex !== -1) {  // Fixed syntax: added missing parenthesis
-            allMarkers.splice(markerIndex, 1);
+        // Find and remove the marker
+        const foundMarker = allMarkers.find(m => m.data.bin === data.bin);
+        if (foundMarker) {
+            // Remove marker
+            map.removeLayer(foundMarker.marker);
+            // Remove label if it exists
+            if (foundMarker.label) {
+                map.removeLayer(foundMarker.label);
+            }
+            // Remove from binToMarker object
+            delete binToMarker[data.bin];
+            // Remove from allMarkers array
+            const index = allMarkers.findIndex(m => m.data.bin === data.bin);
+            if (index !== -1) {
+                allMarkers.splice(index, 1);
+            }
+            // Update markers count if you have that functionality
+            if (typeof updateMarkers === 'function') {
+                updateMarkers();
+            }
         }
-        
-        // Update markers count
-        updateMarkers();
     });
 
     // Add this function with your other utility functions

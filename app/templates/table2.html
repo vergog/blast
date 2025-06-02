@@ -126,7 +126,46 @@
             movableColumns: true,
             history: true,
             headerFilterLiveFilter: true,
-            cellEdited: false, // Remove the cellEdited callback here
+            rowContextMenu: [
+                {
+                    label: "Delete Bridge",
+                    action: function(e, row) {
+                        const bridgeData = row.getData();
+                        if (!bridgeData.bin) {
+                            alert('Invalid bridge selection');
+                            return;
+                        }
+
+                        if (confirm(`Are you sure you want to delete bridge ${bridgeData.bin}?`)) {
+                            fetch(`/api/bridges/${bridgeData.bin}`, {
+                                method: 'DELETE',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                }
+                            })
+                            .then(response => {
+                                if (!response.ok) {
+                                    return response.json().then(err => Promise.reject(err));
+                                }
+                                return response.json();
+                            })
+                            .then(() => {
+                                row.delete();
+                                console.log(`Bridge ${bridgeData.bin} deleted successfully`);
+                                // Emit socket event with proper structure
+                                socket.emit('bridge_deleted', {
+                                    type: 'delete',
+                                    bin: bridgeData.bin
+                                });
+                            })
+                            .catch(error => {
+                                console.error('Error deleting bridge:', error);
+                                alert(`Failed to delete bridge: ${error.message || 'Unknown error'}`);
+                            });
+                        }
+                    }
+                }
+            ]
         });
 
         // Add separate event listener for cell edits
