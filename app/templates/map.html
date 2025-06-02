@@ -78,8 +78,8 @@
     /* Searchbar */
     #binSearchWrapper {
         position: absolute;
-        top: 10px;
-        left: 50px;
+        top: 20px;
+        left: 20px;
         z-index: 9999;
         background: white;
         padding: 6px 10px;
@@ -94,8 +94,8 @@
     /* Toggles */
     #panelHeaderWrapper {
         position: absolute;
-        top: 80px;
-        left: 10px;
+        top: 60px;
+        left: 19px;
         z-index: 9999;
         display: flex;
         gap: 10px;
@@ -115,10 +115,10 @@
     #filterPanelWrapper,
     #dueSoonPanelWrapper {
         position: absolute;
-        top: 115px;
-        left: 10px;
+        top: 95px;
+        left: 19px;
         z-index: 9998;
-        max-width: 265px;
+        max-width: 200px;
     }
 
     #filterToggleBtn {
@@ -176,18 +176,15 @@
         box-shadow: 0 1px 6px rgba(0,0,0,0.3);
         max-height: calc(100vh - 150px);
         overflow-y: auto;
-        width: 250px;
+        width: 100%;
     }
 
-    /* Always show panel on desktop */
-    @media (min-width: 768px) {
-    }
 
     /* Force one checkbox per line */
     #filterPanel label {
         display: block;
         margin: 2px 0;
-        font-size: 13px;
+        font-size: 15px;
         white-space: nowrap;
     }
 
@@ -200,19 +197,43 @@
     #dueSoonPanel {
         display: none;  /* hidden by default */
         background: white;
-        padding: 15px;
+        padding: 10px;
         border-radius: 6px;
         box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
-        width: 250px;
+        width: 440px;
+    }
+
+    .due-soon-input {
+        display: inline-block;
+        white-space: nowrap;
+    }
+
+    .due-soon-controls {
+        display: inline-flex;
+        flex-direction: row;
+        gap: 2px;
+        margin-left: 10px;
+        float: right;
     }
 
     #dueSoonPanel input {
-        width: 40px;
+        width: 25px;
         margin: 0 5px;
     }
 
-    @media (min-width: 768px) {
+    #dueSoonPanel button {
+        width: 50px;
+        padding: 2px 0;
+        height: 22px;
+        line-height: 18px;
     }
+
+    #dueSoonDays::-webkit-inner-spin-button,
+    #dueSoonDays::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
 
     /* Map Legend */
     #mapLegend {
@@ -239,19 +260,19 @@
 
     #visibleCounter {
         position: absolute;
-        top: 81px;
-        left: 210px;
+        top: 20px;
+        left: 220px;
         z-index: 9999;
         background: white;
         padding: 4px 10px;
         border-radius: 6px;
-        font-size: 13px;
+        font-size: 15px;
         box-shadow: 0 1px 6px rgba(0,0,0,0.3);
     }
 
     .collapsible-content {
         display: block;
-        margin-left: 15px;
+        margin-left: 0px;
     }
 
     .collapsible-content.collapsed {
@@ -308,22 +329,6 @@
         overflow-y: auto;
     }
 
-    .close-btn {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        padding: 8px 16px;
-        background: #f44336;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-    }
-
-    .close-btn:hover {
-        background: #d32f2f;
-    }
-
     .custom-marker {
         background: none;
         border: none;
@@ -331,14 +336,26 @@
 
     </style>
 </head>
-
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
 <body>
     <!-- Sidebar Modal -->
     <div id="bridgeSidebarOverlay" onclick="closeModal()"></div>
     <div id="bridgeSidebar" class="sidebar">
         <div class="sidebar-content">
             <div id="modal-body"></div>
-            <button onclick="document.getElementById('bridgeSidebar').classList.remove('open')" class="close-btn">Close</button>
         </div>
     </div>
 
@@ -419,13 +436,17 @@
 
     <!-- Due Soon -->
     <div id="dueSoonPanelWrapper">
-      <div id="dueSoonPanel">
-        <label for="dueSoonDays">Show uninspected bridges due in next</label>
-        <input type="number" id="dueSoonDays" value="14" min="1" />
-        <span>days</span>
-        <button id="applyDueSoon">Apply</button>
-        <button id="clearDueSoon">Clear</button>
-      </div>
+        <div id="dueSoonPanel">
+            <div class="due-soon-input">
+                <label for="dueSoonDays">Show uninspected bridges due in next</label>
+                <input type="number" id="dueSoonDays" value="14" min="1" />
+                <span>days</span>
+            </div>
+            <div class="due-soon-controls">
+                <button id="applyDueSoon">Apply</button>
+                <button id="clearDueSoon">Clear</button>
+            </div>
+        </div>
     </div>
 
     <!-- Legend -->
@@ -437,7 +458,21 @@
 
     <!-- Map Container -->
     <div id="map"></div>
-
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
+<!---->
     <script 
       src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
     </script>
@@ -697,10 +732,30 @@
             unique.due_month.add(b.due_month);
         });
 
-        // Create checkboxes for each filter group
+        // Create checkboxes for each filter group with custom sorting
         function createCheckbox(containerId, groupKey, values) {
             const container = document.getElementById(containerId);
-            values.forEach(val => {
+            
+            // Sort values with custom logic
+            let sortedValues = Array.from(values);
+            if (groupKey === 'flags' || groupKey === 'posting' || groupKey === 'access') {
+                // Put "Yes" first, then "No", then any other values
+                sortedValues.sort((a, b) => {
+                    if (a === "Yes" && b === "No") return -1;
+                    if (a === "No" && b === "Yes") return 1;
+                    if (a === "Yes") return -1;
+                    if (b === "Yes") return 1;
+                    if (a === "No") return -1;
+                    if (b === "No") return 1;
+                    return a.localeCompare(b);
+                });
+            } else if (groupKey === 'week') {
+                sortedValues = pushUnscheduledToEnd(sortWeeks(values));
+            } else if (groupKey === 'due_month') {
+                sortedValues = sortMonths(values);
+            }
+
+            sortedValues.forEach(val => {
                 const safeId = `${containerId}-${val.replace(/\W+/g, "_")}`;
                 const label = document.createElement("label");
                 label.innerHTML = `
@@ -758,7 +813,9 @@
 
     document.addEventListener("DOMContentLoaded", function () {
         // Initialize map first
-        map = L.map('map').setView([43.0, -75.0], 7);
+        map = L.map('map', {
+            zoomControl: false
+        }).setView([43.0, -75.0], 7);
         
         // Initialize markers layer group after map is created
         markersGroup = L.layerGroup().addTo(map);
