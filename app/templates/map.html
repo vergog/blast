@@ -213,19 +213,20 @@
       position: absolute;
       bottom: 10px;
       right: 10px;
+      z-index: 9999;
       background: white;
-      padding: 8px;
-      border-radius: 4px;
-      font-family: sans-serif;
-      font-size: 14px;
-      box-shadow: 0 1px 6px rgba(0,0,0,0.3);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 15px;
+      box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+      line-height: 2.0;
     }
 
     .legend-box {
       display: inline-block;
-      width: 12px;
-      height: 12px;
-      margin-right: 6px;
+      width: 16px;
+      height: 16px;
+      margin-right: 8px;
       border-radius: 50%;
       vertical-align: middle;
     }
@@ -325,6 +326,18 @@
     </style>
 </head>
 
+
+
+
+
+
+
+
+
+
+
+
+
 <body>
     <!-- Sidebar Modal -->
     <div id="bridgeSidebarOverlay" onclick="closeModal()"></div>
@@ -337,7 +350,7 @@
 
     <!-- Searchbar -->
     <div id="binSearchWrapper">
-        <input type="text" id="binSearchInput" list="binList" placeholder="Search BIN..." />
+        <input type="text" id="binSearchInput" placeholder="Search BIN..." list="binList" />
         <datalist id="binList"></datalist>
     </div>
 
@@ -413,7 +426,7 @@
     <!-- Due Soon -->
     <div id="dueSoonPanelWrapper">
       <div id="dueSoonPanel">
-        <label for="dueSoonDays">Show bridges due in next</label>
+        <label for="dueSoonDays">Show uninspected bridges due in next</label>
         <input type="number" id="dueSoonDays" value="14" min="1" />
         <span>days</span>
         <button id="applyDueSoon">Apply</button>
@@ -427,7 +440,20 @@
         <div><span class="legend-box" style="background-color: orange;"></span> Scheduled</div>
         <div><span class="legend-box" style="background-color: green;"></span> Inspected</div>
     </div>
+
+    <!-- Map Container -->
     <div id="map"></div>
+
+
+
+
+
+
+
+
+
+
+    
 
     <script 
       src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
@@ -656,119 +682,119 @@
     }
 
     document.addEventListener("DOMContentLoaded", function () {
-    // Initialize map first
-    map = L.map('map').setView([43.0, -75.0], 7);
-    
-    // Initialize markers layer group after map is created
-    markersGroup = L.layerGroup().addTo(map);
-
-    map.on('zoomend', updateBinLabelVisibility);
-    
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
-
-    // Panel toggle setup
-    const filterToggleBtn = document.getElementById("filterToggleBtn");
-    const dueSoonToggleBtn = document.getElementById("dueSoonToggleBtn");
-    const filterPanel = document.getElementById("filterPanel");
-    const dueSoonPanel = document.getElementById("dueSoonPanel");
-
-    // Filter panel toggle
-    filterToggleBtn.addEventListener("click", () => {
-        if (isDueSoonActive) {
-            alert("Please clear 'Due Soon' filter before using other filters");
-            return;
-        }
-
-        const isVisible = filterPanel.style.display === "block";
-        filterPanel.style.display = isVisible ? "none" : "block";
-        dueSoonPanel.style.display = "none";
+        // Initialize map first
+        map = L.map('map').setView([43.0, -75.0], 7);
         
-        filterToggleBtn.textContent = isVisible ? "🔽 Filters" : "🔼 Filters";
-        dueSoonToggleBtn.textContent = "🔽 Due Soon";
-    });
+        // Initialize markers layer group after map is created
+        markersGroup = L.layerGroup().addTo(map);
 
-    // Due Soon panel toggle
-    dueSoonToggleBtn.addEventListener("click", () => {
-        const isVisible = dueSoonPanel.style.display === "block";
-        dueSoonPanel.style.display = isVisible ? "none" : "block";
-        filterPanel.style.display = "none";
+        map.on('zoomend', updateBinLabelVisibility);
         
-        dueSoonToggleBtn.textContent = isVisible ? "🔽 Due Soon" : "🔼 Due Soon";
-        filterToggleBtn.textContent = "🔽 Filters";
-    });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
 
-    // Collapse toggles for filter groups
-    document.querySelectorAll('.collapse-toggle').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const targetId = btn.dataset.target;
-            const content = document.getElementById(targetId);
-            if (!content) {
-                console.error(`Target content not found: ${targetId}`);
+        // Panel toggle setup
+        const filterToggleBtn = document.getElementById("filterToggleBtn");
+        const dueSoonToggleBtn = document.getElementById("dueSoonToggleBtn");
+        const filterPanel = document.getElementById("filterPanel");
+        const dueSoonPanel = document.getElementById("dueSoonPanel");
+
+        // Filter panel toggle
+        filterToggleBtn.addEventListener("click", () => {
+            if (isDueSoonActive) {
+                alert("Please clear 'Due Soon' filter before using other filters");
                 return;
             }
+
+            const isVisible = filterPanel.style.display === "block";
+            filterPanel.style.display = isVisible ? "none" : "block";
+            dueSoonPanel.style.display = "none";
             
-            content.classList.toggle('collapsed');
-            btn.textContent = content.classList.contains('collapsed') ? '+' : '−';
-        });
-    });
-
-    // Due Soon Apply button
-    document.getElementById("applyDueSoon").addEventListener("click", () => {
-        isDueSoonActive = true;
-        const days = parseInt(document.getElementById("dueSoonDays").value, 10);
-        const today = new Date();
-
-        // Hide all markers first
-        allMarkers.forEach(({ marker }) => {
-            map.removeLayer(marker);
+            filterToggleBtn.textContent = isVisible ? "🔽 Filters" : "🔼 Filters";
+            dueSoonToggleBtn.textContent = "🔽 Due Soon";
         });
 
-        // Show only bridges due within the specified days
-        allMarkers.forEach(({ marker, data }) => {
-            try {
-                const inspected = data.completed && data.completed.trim() !== "";
-                if (inspected) return; // Skip inspected bridges
+        // Due Soon panel toggle
+        dueSoonToggleBtn.addEventListener("click", () => {
+            const isVisible = dueSoonPanel.style.display === "block";
+            dueSoonPanel.style.display = isVisible ? "none" : "block";
+            filterPanel.style.display = "none";
+            
+            dueSoonToggleBtn.textContent = isVisible ? "🔽 Due Soon" : "🔼 Due Soon";
+            filterToggleBtn.textContent = "🔽 Filters";
+        });
 
-                const dueParts = data.due.split("/");
-                const dueDate = new Date(2025, parseInt(dueParts[0]) - 1, parseInt(dueParts[1]));
-                const diffDays = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
-
-                if (diffDays >= 0 && diffDays <= days) {
-                    map.addLayer(marker);
+        // Collapse toggles for filter groups
+        document.querySelectorAll('.collapse-toggle').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetId = btn.dataset.target;
+                const content = document.getElementById(targetId);
+                if (!content) {
+                    console.error(`Target content not found: ${targetId}`);
+                    return;
                 }
-            } catch (error) {
-                console.warn(`Error processing due date for bridge ${data.bin}:`, error);
-            }
+                
+                content.classList.toggle('collapsed');
+                btn.textContent = content.classList.contains('collapsed') ? '+' : '−';
+            });
         });
 
-        // Update visible counter
-        const visibleCount = allMarkers.filter(({ marker }) => map.hasLayer(marker)).length;
-        document.getElementById("visibleCounter").textContent = 
-            `Visible Bridges: ${visibleCount}`;
+        // Due Soon Apply button
+        document.getElementById("applyDueSoon").addEventListener("click", () => {
+            isDueSoonActive = true;
+            const days = parseInt(document.getElementById("dueSoonDays").value, 10);
+            const today = new Date();
 
-        // Close the filters panel if it's open
-        filterPanel.style.display = "none";
-        filterToggleBtn.textContent = "🔽 Filters";
+            // Hide all markers first
+            allMarkers.forEach(({ marker }) => {
+                map.removeLayer(marker);
+            });
 
-        updateBinLabelVisibility();
-    });
+            // Show only bridges due within the specified days
+            allMarkers.forEach(({ marker, data }) => {
+                try {
+                    const inspected = data.completed && data.completed.trim() !== "";
+                    if (inspected) return; // Skip inspected bridges
 
-    // Due Soon Clear button
-    document.getElementById("clearDueSoon").addEventListener("click", () => {
-        isDueSoonActive = false;
-        
-        // Reset to normal filter view
-        updateMarkers();
-        updateBinLabelVisibility();
+                    const dueParts = data.due.split("/");
+                    const dueDate = new Date(2025, parseInt(dueParts[0]) - 1, parseInt(dueParts[1]));
+                    const diffDays = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
 
-        // Close the due soon panel
-        dueSoonPanel.style.display = "none";
-        dueSoonToggleBtn.textContent = "🔽 Due Soon";
-    });
+                    if (diffDays >= 0 && diffDays <= days) {
+                        map.addLayer(marker);
+                    }
+                } catch (error) {
+                    console.warn(`Error processing due date for bridge ${data.bin}:`, error);
+                }
+            });
 
-               
+            // Update visible counter
+            const visibleCount = allMarkers.filter(({ marker }) => map.hasLayer(marker)).length;
+            document.getElementById("visibleCounter").textContent = 
+                `Visible Bridges: ${visibleCount}`;
+
+            // Close the filters panel if it's open
+            filterPanel.style.display = "none";
+            filterToggleBtn.textContent = "🔽 Filters";
+
+            updateBinLabelVisibility();
+        });
+
+        // Due Soon Clear button
+        document.getElementById("clearDueSoon").addEventListener("click", () => {
+            isDueSoonActive = false;
+            
+            // Reset to normal filter view
+            updateMarkers();
+            updateBinLabelVisibility();
+
+            // Close the due soon panel
+            dueSoonPanel.style.display = "none";
+            dueSoonToggleBtn.textContent = "🔽 Due Soon";
+        });
+
+                
         fetch('/api/bridges')
             .then(response => {
                 if (!response.ok) {
@@ -898,6 +924,52 @@
                     });
                 });
 
+                // Replace the existing searchbar code inside the fetch .then() callback
+                const searchInput = document.getElementById("binSearchInput");
+                const searchDatalist = document.getElementById("binList");
+
+                // Clear any existing options
+                searchDatalist.innerHTML = "";
+
+                // Add input event for live filtering
+                searchInput.addEventListener("input", function() {
+                    const value = this.value.trim().toUpperCase();
+                    searchDatalist.innerHTML = "";  // Clear existing options
+
+                    if (value.length >= 3) {
+                        const matches = bridgeData
+                            .filter(b => b.bin.toUpperCase().includes(value))
+                            .slice(0, 50);  // Limit to first 50 matches
+
+                        matches.forEach(bridge => {
+                            const option = document.createElement("option");
+                            option.value = bridge.bin;
+                            searchDatalist.appendChild(option);
+                        });
+                    }
+                });
+
+                // Keep the existing keypress handler for Enter key
+                searchInput.addEventListener("keypress", function(e) {
+                    if (e.key === "Enter") {
+                        const value = this.value.trim().toUpperCase();
+                        const bridge = bridgeData.find(b => b.bin.toUpperCase() === value);
+                        
+                        if (bridge) {
+                            map.setView([bridge.lat, bridge.lon], 16);
+                            const marker = binToMarker[bridge.bin];
+                            if (marker) {
+                                marker.openPopup();
+                            }
+                        } else {
+                            alert("Bridge not found");
+                        }
+                        
+                        this.value = "";
+                    }
+                });
+
+
                 updateLabelVisibility();
                 updateMarkers();
             })
@@ -913,62 +985,62 @@
             
             return inspected ? "green" : scheduled ? "orange" : "blue";
         }
+            
+
+        const socket = io();
         
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
 
-    const socket = io();
-    
-    socket.on('connect', () => {
-        console.log('Connected to server');
-    });
+        socket.on('bridge_update', (updatedBridge) => {
+            console.log('Bridge update received:', updatedBridge);
+            
+            // Get the marker for this bridge
+            const marker = binToMarker[updatedBridge.bin];
+            if (!marker) return;
 
-    socket.on('bridge_update', (updatedBridge) => {
-        console.log('Bridge update received:', updatedBridge);
-        
-        // Get the marker for this bridge
-        const marker = binToMarker[updatedBridge.bin];
-        if (!marker) return;
+            // Update the bridge data stored on the marker
+            marker.bridgeData = updatedBridge;
 
-        // Update the bridge data stored on the marker
-        marker.bridgeData = updatedBridge;
-
-        // Update marker position if lat/lon changed
-        if (updatedBridge.lat && updatedBridge.lon) {
-            marker.setLatLng([updatedBridge.lat, updatedBridge.lon]);
-        }
-
-        // Update marker color based on status
-        const inspected = updatedBridge.completed && updatedBridge.completed.trim() !== "";
-        const scheduled = !inspected && updatedBridge.week && 
-            updatedBridge.week.trim().toLowerCase() !== "unscheduled";
-        
-        let iconColor = inspected ? "green" : scheduled ? "orange" : "blue";
-        marker.setIcon(createMarkerIcon(iconColor));
-
-        // Create new popup content
-        const popup = `
-            <span style="font-size:16px;"><b><u>${updatedBridge.bin}</u></b></span><br>
-            <b>Coordinates:</b> <a href="https://www.google.com/maps/dir/?api=1&destination=${updatedBridge.lat},${updatedBridge.lon}" target="_blank" style="color:#1976d2;">${updatedBridge.lat.toFixed(4)}, ${updatedBridge.lon.toFixed(4)}</a><br>
-            <b>New Standards:</b> ${updatedBridge.stds}<br>
-            <b>Due Date:</b> ${updatedBridge.due}/25<br>
-            <b>Active Flags:</b> ${updatedBridge.flags}<br>
-            <b>Load Posting:</b> ${updatedBridge.posting_label}<br>
-            <a href="#" onclick="showModal('${updatedBridge.bin}'); return false;">See more…</a>
-        `;
-
-        // Update the popup content
-        if (marker.getPopup()) {
-            marker.getPopup().setContent(popup);
-        }
-
-        // Update sidebar if this bridge is currently shown
-        const sidebar = document.getElementById("bridgeSidebar");
-        if (sidebar.classList.contains("open")) {
-            const currentBin = document.querySelector("#modal-body")?.getAttribute("data-bin");
-            if (currentBin === updatedBridge.bin) {
-                showModal(updatedBridge.bin);  // Re-fetch and display updated data
+            // Update marker position if lat/lon changed
+            if (updatedBridge.lat && updatedBridge.lon) {
+                marker.setLatLng([updatedBridge.lat, updatedBridge.lon]);
             }
-        }
-    });
+
+            // Update marker color based on status
+            const inspected = updatedBridge.completed && updatedBridge.completed.trim() !== "";
+            const scheduled = !inspected && updatedBridge.week && 
+                updatedBridge.week.trim().toLowerCase() !== "unscheduled";
+            
+            let iconColor = inspected ? "green" : scheduled ? "orange" : "blue";
+            marker.setIcon(createMarkerIcon(iconColor));
+
+            // Create new popup content
+            const popup = `
+                <span style="font-size:16px;"><b><u>${updatedBridge.bin}</u></b></span><br>
+                <b>Coordinates:</b> <a href="https://www.google.com/maps/dir/?api=1&destination=${updatedBridge.lat},${updatedBridge.lon}" target="_blank" style="color:#1976d2;">${updatedBridge.lat.toFixed(4)}, ${updatedBridge.lon.toFixed(4)}</a><br>
+                <b>New Standards:</b> ${updatedBridge.stds}<br>
+                <b>Due Date:</b> ${updatedBridge.due}/25<br>
+                <b>Active Flags:</b> ${updatedBridge.flags}<br>
+                <b>Load Posting:</b> ${updatedBridge.posting_label}<br>
+                <a href="#" onclick="showModal('${updatedBridge.bin}'); return false;">See more…</a>
+            `;
+
+            // Update the popup content
+            if (marker.getPopup()) {
+                marker.getPopup().setContent(popup);
+            }
+
+            // Update sidebar if this bridge is currently shown
+            const sidebar = document.getElementById("bridgeSidebar");
+            if (sidebar.classList.contains("open")) {
+                const currentBin = document.querySelector("#modal-body")?.getAttribute("data-bin");
+                if (currentBin === updatedBridge.bin) {
+                    showModal(updatedBridge.bin);  // Re-fetch and display updated data
+                }
+            }
+        });
 
     }); // Close DOMContentLoaded event listener
 
