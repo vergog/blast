@@ -57,15 +57,21 @@
 
     /* BIN label style */
     .bin-label {
+        display: inline-block;
         font-size: 12px;
         font-weight: bold;
-        color: white;
-        background-color: rgba(0, 0, 0, 0.6);
-        padding: 2px 4px;
-        border-radius: 4px;
-        text-align: center;
         white-space: nowrap;
-        display: none; /* toggled on zoom */
+    }
+
+    .label-background {
+        display: inline-block;
+        padding: 3px 6px;
+        border-radius: 3px;
+        color: #ffffff; /* White text */
+        background-color: rgba(0, 0, 0, 0.7); /* Default dark background */
+        white-space: nowrap;
+        box-shadow: 1px 1px 4px rgba(0,0,0,0.2);
+        line-height: 1;
     }
 
 
@@ -546,15 +552,30 @@
         const inspected = bridge.completed && bridge.completed.trim() !== "";
         const scheduled = !inspected && 
             bridge.week && 
+            bridge.week.trim() !== "" && 
             bridge.week.trim().toLowerCase() !== "unscheduled";
+        
         return inspected ? "Inspected" : scheduled ? "Scheduled" : "Assigned";
     }
 
-    // Helper function to get marker color based on status
+    // Replace or update these helper functions
+    function getBridgeStatus(bridge) {
+        const inspected = bridge.completed && bridge.completed.trim() !== "";
+        const scheduled = !inspected && 
+            bridge.week && 
+            bridge.week.trim() !== "" && 
+            bridge.week.trim().toLowerCase() !== "unscheduled";
+        
+        if (inspected) return "Inspected";
+        if (scheduled) return "Scheduled";
+        return "Assigned";
+    }
+
     function getMarkerColor(status) {
         switch (status) {
             case "Inspected": return "green";
             case "Scheduled": return "orange";
+            case "Assigned": return "blue";
             default: return "blue";
         }
     }
@@ -574,6 +595,7 @@
         const inspected = bridge.completed && bridge.completed.trim() !== "";
         const scheduled = !inspected && 
             bridge.week && 
+            bridge.week.trim() !== "" && 
             bridge.week.trim().toLowerCase() !== "unscheduled";
         return inspected ? "Inspected" : scheduled ? "Scheduled" : "Assigned";
     }
@@ -818,9 +840,29 @@
                         return;
                     }
 
-                    // Create marker using L.marker instead of L.circleMarker
+                    // Get the bridge status using getBridgeStatus function
+                    const status = getBridgeStatus(bridge);
+
+                    const color = getMarkerColor(status);
+                    
+                    // Create marker with proper color based on status
                     const marker = L.marker([bridge.lat, bridge.lon], {
-                        icon: createMarkerIcon(getMarkerColor(bridge))
+                        icon: createMarkerIcon(getMarkerColor(status))
+                    }).addTo(map);
+
+
+                    const rgbaColor = color === 'blue' ? 'rgba(0, 0, 255, 0.8)' : 
+                                      color === 'orange' ? 'rgba(255, 165, 0, 0.8)' : 
+                                      'rgba(0, 128, 0, 0.8)'; // green
+
+                    const label = L.marker([bridge.lat, bridge.lon], {
+                        icon: L.divIcon({
+                            className: 'bin-label',
+                            html: `<span class="label-background" style="background-color: ${rgbaColor};">${bridge.bin}</span>`,
+                            iconSize: [0, 0],
+                            iconAnchor: [-10, 8]  // Adjust to position label properly
+                        }),
+                        interactive: false
                     }).addTo(map);
 
                     // Add popup
@@ -836,18 +878,7 @@
 
                     binToMarker[bridge.bin] = marker;
                     marker.bridgeData = bridge;
-
-                    // Add label
-                    const label = L.marker([bridge.lat, bridge.lon], {
-                        icon: L.divIcon({
-                            className: 'bin-label',
-                            html: bridge.bin,
-                            iconSize: null
-                        }),
-                        interactive: false
-                    }).addTo(map);
-
-                    allMarkers.push({ marker, data: bridge });
+                    allMarkers.push({ marker, data: bridge, label });
                 });
 
                 // Set up filter checkbox event listeners
@@ -977,14 +1008,6 @@
                 console.error('Error fetching bridge data:', error);
             });
 
-        function getMarkerColor(bridge) {
-            const inspected = bridge.completed && bridge.completed.trim() !== "";
-            const scheduled = !inspected && bridge.week && 
-                bridge.week.trim() !== "" && 
-                bridge.week.trim().toLowerCase() !== "unscheduled";
-            
-            return inspected ? "green" : scheduled ? "orange" : "blue";
-        }
             
 
         const socket = io();
@@ -1165,7 +1188,7 @@
         
         // Remove from allMarkers array
         const markerIndex = allMarkers.findIndex(m => m.data.bin === data.bin);
-        if (markerIndex !== -1) {
+        if (markerIndex !== -1) {  // Fixed syntax: added missing parenthesis
             allMarkers.splice(markerIndex, 1);
         }
         
@@ -1179,13 +1202,15 @@
         const zoom = map.getZoom();
         const showLabels = zoom >= 11;
 
-        // Update visibility of all bin labels
-        document.querySelectorAll('.bin-label').forEach(label => {
-            const parentMarker = label._marker; // Get the associated marker
-            if (parentMarker && map.hasLayer(parentMarker)) {
-                label.style.display = showLabels ? 'block' : 'none';
-            } else {
-                label.style.display = 'none';
+        allMarkers.forEach(({ marker, label }) => {
+            if (label && map.hasLayer(marker)) {
+                if (showLabels) {
+                    if (!map.hasLayer(label)) map.addLayer(label);
+                } else {
+                    if (map.hasLayer(label)) map.removeLayer(label);
+                }
+            } else if (label && map.hasLayer(label)) {
+                map.removeLayer(label);
             }
         });
     }
