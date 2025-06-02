@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bridge Spreadsheet View</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- Tabulator -->
+    <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
+    <script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+
+    <!-- Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+        #bridges-table {
+            width: 100%;
+            height: calc(100vh - 50px);
+        }
+        .controls {
+            padding: 10px;
+            background: #f5f5f5;
+            border-top: 1px solid #ddd;
+        }
+        #addBridgeBtn, #saveBridgeBtn {
+            padding: 8px 16px;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        #addBridgeBtn {
+            background-color: #4CAF50;
+        }
+        #addBridgeBtn:hover {
+            background-color: #45a049;
+        }
+        #saveBridgeBtn {
+            background-color: #2196F3;
+        }
+        #saveBridgeBtn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #saveBridgeBtn:hover:not(:disabled) {
+            background-color: #1976D2;
+        }
+    </style>
+</head>
+<body>
+    <div id="bridges-table"></div>
+    <div class="controls">
+        <button id="addBridgeBtn">Add New Bridge</button>
+        <button id="saveBridgeBtn" disabled>Save Bridge</button>
+    </div>
+
+    <script>
+        // Initialize Socket.IO
+        const socket = io();
+        let table;
+        let isAddingNewBridge = false;
+
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+
+        // Socket.IO update handler
+        socket.on('bridge_update', (updatedBridge) => {
+            console.log('Bridge update received:', updatedBridge);
+            if (table) {
+                // Find and update table row
+                const row = table.getRows().find(row => row.getData().bin === updatedBridge.bin);
+                if (row) {
+                    row.update(updatedBridge)
+                        .then(() => {
+                            console.log('Bridge updated in table');
+                            
+                            // Only trigger map update if lat/lon changed
+                            const oldData = row.getData();
+                            if (oldData.lat !== updatedBridge.lat || oldData.lon !== updatedBridge.lon) {
+                                // Emit a special event for coordinate updates
+                                socket.emit('coordinates_update', {
+                                    bin: updatedBridge.bin,
+                                    lat: updatedBridge.lat,
+                                    lon: updatedBridge.lon
+                                });
+                            }
+                        })
+                        .catch(err => console.error('Error updating bridge in table:', err));
+                } else {
+                    console.warn(`Could not find row for bridge ${updatedBridge.bin}`);
+                }
+            }
+        });
+
+        // Define table columns
+        const columns = [
+            { title: "BIN", field: "bin", editor: "input", headerFilter: "input" },
+            { title: "LAT", field: "lat", editor: "input", headerFilter: "input" },
+            { title: "LON", field: "lon", editor: "input", headerFilter: "input" },
+            { title: "REGION", field: "region", editor: "input", headerFilter: "input" },
+            { title: "COUNTY", field: "county", editor: "input", headerFilter: "input" },
+            { title: "DUE", field: "due", editor: "input", headerFilter: "input" },
+            { title: "COMPLETED", field: "completed", editor: "input", headerFilter: "input" },
+            { title: "WEEK", field: "week", editor: "input", headerFilter: "input" },
+            { title: "FLAGS", field: "flags", editor: "input", headerFilter: "input" },
+            { title: "POSTING", field: "posting", editor: "input", headerFilter: "input" },
+            { title: "ACCESS", field: "access", editor: "input", headerFilter: "input" },
+            { title: "SPE", field: "spe", editor: "input", headerFilter: "input" },
+            { title: "STDS", field: "stds", editor: "input", headerFilter: "input" },
+            { title: "FIELD TIME", field: "field_time", editor: "input", headerFilter: "input" },
+            { title: "DUE MONTH", field: "due_month", editor: "input", headerFilter: "input" }
+        ];
+
+        // Initialize Tabulator
+        table = new Tabulator("#bridges-table", {
+            columns: columns,
+            ajaxURL: "/api/bridges",
+            layout: "fitColumns",
+            movableColumns: true,
+            history: true,
+            headerFilterLiveFilter: true,
+            cellEdited: false, // Remove the cellEdited callback here
+        });
+
+        // Add separate event listener for cell edits
+        table.on("cellEdited", function(cell) {
+            // Don't update if we're adding a new bridge
+            if (isAddingNewBridge) return;
+
+            const rowData = cell.getRow().getData();
+            const field = cell.getField();
+            const value = cell.getValue();
+            const oldValue = cell.getOldValue();
+
+            // Only proceed if value actually changed
+            if (value === oldValue) return;
+
+            // Make sure we have a BIN
+            if (!rowData.bin) {
+                cell.restoreOldValue();
+                alert("Cannot update: No BIN found for this row");
+                return;
+            }
+
+            console.log(`Attempting to update ${rowData.bin} field ${field} from ${oldValue} to ${value}`);
+
+            // Send PATCH request
+            fetch(`/api/bridges/${rowData.bin}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ [field]: value })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Update successful:', data);
+                // Update the row with returned data
+                cell.getRow().update(data);
+                // Emit socket event
+                socket.emit('bridge_update', data);
+            })
+            .catch(error => {
+                console.error('Error updating bridge:', error);
+                cell.restoreOldValue();
+                alert(`Failed to update: ${error.message}`);
+            });
+        });
+
+        // Add New Bridge button handler
+        document.getElementById('addBridgeBtn').addEventListener('click', () => {
+            isAddingNewBridge = true;
+            table.addRow({})
+                .then(row => {
+                    row.scrollTo();
+                    table.selectRow(row);
+                });
+        });
+
+        const saveBridgeBtn = document.getElementById('saveBridgeBtn');
+
+        // Enable/disable save button based on required fields
+        table.on("cellEdited", function(cell) {
+            if (isAddingNewBridge) {
+                const row = cell.getRow();
+                const data = row.getData();
+                const hasRequiredFields = data.bin && data.lat && data.lon;
+                saveBridgeBtn.disabled = !hasRequiredFields;
+            }
+        });
+
+        // Save Bridge button handler
+        saveBridgeBtn.addEventListener('click', () => {
+            const newRow = table.getRows().slice(-1)[0];
+            const newRowData = newRow.getData();
+
+            // Validate required fields
+            const requiredFields = ['bin', 'lat', 'lon'];
+            const missingFields = requiredFields.filter(field => 
+                !newRowData[field] || String(newRowData[field]).trim() === ''
+            );
+
+            if (missingFields.length > 0) {
+                alert(`Please fill in all required fields: ${missingFields.join(', ')}`);
+                return;
+            }
+
+            // Prepare new bridge data
+            const newBridge = {
+                ...newRowData,
+                region: newRowData.region || '',
+                county: newRowData.county || '',
+                due: newRowData.due || '',
+                completed: newRowData.completed || '',
+                week: newRowData.week || '',
+                flags: newRowData.flags || '',
+                flags_info: '',
+                posting: newRowData.posting || '',
+                posting_info: '',
+                access: newRowData.access || '',
+                access_info: '',
+                spe: newRowData.spe || '',
+                stds: newRowData.stds || '',
+                field_time: newRowData.field_time || '',
+                due_month: newRowData.due_month || '',
+                spans: '',
+                prev_gr: '',
+                issued: ''
+            };
+
+            // Post new bridge to API
+            fetch('/api/bridges', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(newBridge)
+            })
+            .then(res => {
+                if (!res.ok) {
+                    return res.json().then(err => {
+                        throw new Error(err.message || 'Failed to save bridge');
+                    });
+                }
+                return res.json();
+            })
+            .then(result => {
+                console.log('Created new bridge:', result);
+                isAddingNewBridge = false;
+                table.setData("/api/bridges")
+                    .then(() => {
+                        saveBridgeBtn.disabled = true;
+                        alert('Bridge saved successfully!');
+                    });
+            })
+            .catch(err => {
+                console.error('Error creating bridge:', err);
+                alert(`Failed to save bridge: ${err.message}`);
+            });
+        });
+    </script>
+</body>
+</html>

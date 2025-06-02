@@ -13,6 +13,10 @@ def index():
 def table():
     return render_template("table.html")
 
+@main.route("/table2")
+def table2():
+    return render_template("table2.html")
+
 @main.route("/api/bridges")
 def get_bridges():
     bridges = Bridge.query.all()
