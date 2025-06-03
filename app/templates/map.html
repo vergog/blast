@@ -48,11 +48,6 @@
     #modal-body {
         padding: 20px;
     }
-    @media (max-width: 500px) {
-        #bridgeSidebar {
-            width: 250px;
-        }
-    }
 
 
     /* BIN label style */
@@ -200,7 +195,7 @@
         padding: 10px;
         border-radius: 6px;
         box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
-        width: 440px;
+        width: 380px;
     }
 
     .due-soon-input {
@@ -210,22 +205,21 @@
 
     .due-soon-controls {
         display: inline-flex;
-        flex-direction: row;
-        gap: 2px;
         margin-left: 10px;
         float: right;
     }
 
     #dueSoonPanel input {
         width: 25px;
-        margin: 0 5px;
+        margin: 0 1px;
     }
 
     #dueSoonPanel button {
         width: 50px;
-        padding: 2px 0;
+        padding: 1px 0;
         height: 22px;
-        line-height: 18px;
+        line-height: 16px;
+        font-size: 12px;
     }
 
     #dueSoonDays::-webkit-inner-spin-button,
@@ -261,7 +255,7 @@
     #visibleCounter {
         position: absolute;
         top: 20px;
-        left: 220px;
+        left: 215px;
         z-index: 9999;
         background: white;
         padding: 4px 10px;
@@ -444,7 +438,6 @@
             </div>
             <div class="due-soon-controls">
                 <button id="applyDueSoon">Apply</button>
-                <button id="clearDueSoon">Clear</button>
             </div>
         </div>
     </div>
@@ -835,10 +828,17 @@
         // Filter panel toggle
         filterToggleBtn.addEventListener("click", () => {
             if (isDueSoonActive) {
-                alert("Please clear 'Due Soon' filter before using other filters");
-                return;
+                // Automatically clear the Due Soon filter
+                isDueSoonActive = false;
+                updateMarkers();
+                updateBinLabelVisibility();
+                
+                // Reset Due Soon panel state
+                dueSoonPanel.style.display = "none";
+                dueSoonToggleBtn.textContent = "🔽 Due Soon";
             }
 
+            // Toggle filter panel
             const isVisible = filterPanel.style.display === "block";
             filterPanel.style.display = isVisible ? "none" : "block";
             dueSoonPanel.style.display = "none";
@@ -911,19 +911,6 @@
             filterToggleBtn.textContent = "🔽 Filters";
 
             updateBinLabelVisibility();
-        });
-
-        // Due Soon Clear button
-        document.getElementById("clearDueSoon").addEventListener("click", () => {
-            isDueSoonActive = false;
-            
-            // Reset to normal filter view
-            updateMarkers();
-            updateBinLabelVisibility();
-
-            // Close the due soon panel
-            dueSoonPanel.style.display = "none";
-            dueSoonToggleBtn.textContent = "🔽 Due Soon";
         });
 
                 

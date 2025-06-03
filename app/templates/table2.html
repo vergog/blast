@@ -11,6 +11,7 @@
 
     <!-- Socket.IO -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/luxon/3.4.4/luxon.min.js"></script>
 
     <style>
         html, body {
@@ -100,22 +101,281 @@
         });
 
         // Define table columns
-        const columns = [
-            { title: "BIN", field: "bin", editor: "input", headerFilter: "input" },
-            { title: "LAT", field: "lat", editor: "input", headerFilter: "input" },
-            { title: "LON", field: "lon", editor: "input", headerFilter: "input" },
-            { title: "REGION", field: "region", editor: "input", headerFilter: "input" },
-            { title: "COUNTY", field: "county", editor: "input", headerFilter: "input" },
-            { title: "DUE", field: "due", editor: "input", headerFilter: "input" },
-            { title: "COMPLETED", field: "completed", editor: "input", headerFilter: "input" },
-            { title: "WEEK", field: "week", editor: "input", headerFilter: "input" },
-            { title: "FLAGS", field: "flags", editor: "input", headerFilter: "input" },
-            { title: "POSTING", field: "posting", editor: "input", headerFilter: "input" },
-            { title: "ACCESS", field: "access", editor: "input", headerFilter: "input" },
-            { title: "SPE", field: "spe", editor: "input", headerFilter: "input" },
-            { title: "STDS", field: "stds", editor: "input", headerFilter: "input" },
-            { title: "FIELD TIME", field: "field_time", editor: "input", headerFilter: "input" },
-            { title: "DUE MONTH", field: "due_month", editor: "input", headerFilter: "input" }
+        const coreColumns = [
+            // Bridge Identification (A-J)
+            { title: "BIN", field: "bin", headerFilter: "input" },
+            { title: "LAT", field: "lat" },
+            { title: "LON", field: "lon" },
+            { title: "Region", field: "region" },
+            { title: "County", field: "county" },
+            { title: "Due Date", field: "due" },
+            { title: "Previous GR", field: "prev_gr" },
+            { title: "Spans", field: "spans" },
+            { title: "Active Flags", field: "flags" },
+            { title: "Load Posting", field: "posting" },
+
+            // Field Inspection Planning (M-S)
+            { title: "Field Date", field: "field_date" },
+            { title: "Est. Duration", field: "est_duration" },
+            { title: "Special Access", field: "special_access" },
+            { title: "Field Notes", field: "field_notes" },
+            { title: "NSTMs", field: "nstms" },
+            { title: "SpE", field: "spe" },
+            { title: "STDs", field: "stds" }
+        ];
+
+        const workflowColumns = [
+            
+            // Folder Tracking (K-L)
+            { 
+                title: "Folder Received", 
+                field: "folder_received", 
+                editor: "date",
+                formatter: "datetime",
+                formatterParams: {
+                    outputFormat: "MM/DD/YY"
+                }
+            },
+            { 
+                title: "Folder Returned", 
+                field: "folder_returned", 
+                editor: "date",
+                formatter: "datetime",
+                formatterParams: {
+                    outputFormat: "MM/DD/YY"
+                }
+            },
+
+
+            // Inspection Completion (T-V)
+            { 
+                title: "Completion Date", 
+                field: "completion_date", 
+                editor: "date",
+                formatter: "datetime",
+                formatterParams: {
+                    outputFormat: "MM/DD/YY"
+                }
+            },
+            { title: "New GR", field: "new_gr", editor: "input" },
+            { 
+                title: "Flags Issued", 
+                field: "flags_issued", 
+                editor: "select",
+                editorParams: {
+                    values: ["Yes", "No"]
+                }
+            },
+
+            // Report Tasks - Inspector (W-Z)
+            {
+                title: "Report Body",
+                field: "report_body",
+                editor: "select",
+                editorParams: {
+                    values: ["Not Started", "In Progress", "Complete"]
+                },
+                formatter: function(cell) {
+                    const value = cell.getValue();
+                    if (value === "Complete") {
+                        cell.getElement().style.backgroundColor = "#4caf50";
+                    } else if (value === "In Progress") {
+                        cell.getElement().style.backgroundColor = "#fff176";
+                    }
+                    return value;
+                }
+            },
+            {
+                title: "QC Submit",
+                field: "qc_submit",
+                editor: "select",
+                editorParams: {
+                    values: ["Not Started", "In Progress", "Complete"]
+                },
+                formatter: function(cell) {
+                    const value = cell.getValue();
+                    if (value === "Complete") {
+                        cell.getElement().style.backgroundColor = "#4caf50";
+                    } else if (value === "In Progress") {
+                        cell.getElement().style.backgroundColor = "#fff176";
+                    }
+                    return value;
+                }
+            },
+            {
+                title: "Inventory QC",
+                field: "inventory_qc",
+                editor: "select",
+                editorParams: {
+                    values: ["Not Started", "In Progress", "Complete"]
+                },
+                formatter: function(cell) {
+                    const value = cell.getValue();
+                    if (value === "Complete") {
+                        cell.getElement().style.backgroundColor = "#4caf50";
+                    } else if (value === "In Progress") {
+                        cell.getElement().style.backgroundColor = "#fff176";
+                    }
+                    return value;
+                }
+            },
+            {
+                title: "LRFCF Submit",
+                field: "lrfcf_submit",
+                editor: "select",
+                editorParams: {
+                    values: ["Not Started", "In Progress", "Complete", "N/A"]
+                },
+                formatter: function(cell) {
+                    const value = cell.getValue();
+                    if (value === "Complete") {
+                        cell.getElement().style.backgroundColor = "#4caf50";
+                    } else if (value === "In Progress") {
+                        cell.getElement().style.backgroundColor = "#fff176";
+                    } else if (value === "N/A") {
+                        cell.getElement().style.backgroundColor = "#e0e0e0";
+                    }
+                    return value;
+                }
+            },
+
+            // QC Review Process (AA-AB)
+            {
+                title: "QC Comments Received",
+                field: "qc_comments_received",
+                editor: "date",
+                formatter: "datetime",
+                formatterParams: {
+                    outputFormat: "MM/DD/YY"
+                }
+            },
+            {
+                title: "QC Comments Addressed",
+                field: "qc_comments_addressed",
+                editor: "date",
+                formatter: "datetime",
+                formatterParams: {
+                    outputFormat: "MM/DD/YY"
+                }
+            },
+
+            // Assistant Tasks (AC-AG)
+            {
+                title: "Field Sketches",
+                field: "field_sketches",
+                editor: "select",
+                editorParams: {
+                    values: ["Not Started", "In Progress", "Complete"]
+                },
+                formatter: function(cell) {
+                    const value = cell.getValue();
+                    if (value === "Complete") {
+                        cell.getElement().style.backgroundColor = "#4caf50";
+                    } else if (value === "In Progress") {
+                        cell.getElement().style.backgroundColor = "#fff176";
+                    }
+                    return value;
+                }
+            },
+            {
+                title: "Photos Upload",
+                field: "photos_upload",
+                editor: "select",
+                editorParams: {
+                    values: ["Not Started", "Complete", "N/A"]
+                },
+                formatter: function(cell) {
+                    const value = cell.getValue();
+                    if (value === "Complete") {
+                        cell.getElement().style.backgroundColor = "#4caf50";
+                    } else if (value === "N/A") {
+                        cell.getElement().style.backgroundColor = "#e0e0e0";
+                    }
+                    return value;
+                }
+            },
+            {
+                title: "InspectTech",
+                field: "inspect_tech",
+                editor: "select",
+                editorParams: {
+                    values: ["Not Started", "In Progress", "Complete"]
+                },
+                formatter: function(cell) {
+                    const value = cell.getValue();
+                    if (value === "Complete") {
+                        cell.getElement().style.backgroundColor = "#4caf50";
+                    } else if (value === "In Progress") {
+                        cell.getElement().style.backgroundColor = "#fff176";
+                    }
+                    return value;
+                }
+            },
+            {
+                title: "SharePoint",
+                field: "sharepoint",
+                editor: "select",
+                editorParams: {
+                    values: ["Not Started", "Complete"]
+                },
+                formatter: function(cell) {
+                    const value = cell.getValue();
+                    if (value === "Complete") {
+                        cell.getElement().style.backgroundColor = "#4caf50";
+                    }
+                    return value;
+                }
+            },
+            {
+                title: "Database",
+                field: "database",
+                editor: "select",
+                editorParams: {
+                    values: ["Not Started", "Complete"]
+                },
+                formatter: function(cell) {
+                    const value = cell.getValue();
+                    if (value === "Complete") {
+                        cell.getElement().style.backgroundColor = "#4caf50";
+                    }
+                    return value;
+                }
+            },
+
+            // Statistics (AH-AP)
+            {
+                title: "Days Since Due",
+                field: "days_since_due",
+                formatter: function(cell) {
+                    const dueDate = cell.getRow().getData().due;
+                    if (!dueDate) return "";
+                    const today = new Date();
+                    const due = new Date(dueDate);
+                    return Math.floor((today - due) / (1000 * 60 * 60 * 24));
+                }
+            },
+            {
+                title: "Days Since Folder",
+                field: "days_since_folder",
+                formatter: function(cell) {
+                    const receivedDate = cell.getRow().getData().folder_received;
+                    if (!receivedDate) return "";
+                    const today = new Date();
+                    const received = new Date(receivedDate);
+                    return Math.floor((today - received) / (1000 * 60 * 60 * 24));
+                }
+            },
+            {
+                title: "Field to Report",
+                field: "field_to_report",
+                formatter: function(cell) {
+                    const data = cell.getRow().getData();
+                    if (!data.completion_date || !data.report_body || data.report_body !== "Complete") return "";
+                    const fieldDate = new Date(data.completion_date);
+                    const reportDate = new Date(data.report_body_date);
+                    return Math.floor((reportDate - fieldDate) / (1000 * 60 * 60 * 24));
+                }
+            }
         ];
 
         // Initialize Tabulator
