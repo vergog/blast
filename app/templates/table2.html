@@ -118,10 +118,10 @@
             { title: "Field Date", field: "field_date" },
             { title: "Est. Duration", field: "est_duration" },
             { title: "Special Access", field: "special_access" },
-            { title: "Field Notes", field: "field_notes" },
-            { title: "NSTMs", field: "nstms" },
-            { title: "SpE", field: "spe" },
-            { title: "STDs", field: "stds" }
+            { title: "Notes", field: "notes" },
+            { title: "NSTM", field: "nstm" },
+            { title: "Special Emphasis", field: "spe" },
+            { title: "Standards", field: "stds" }
         ];
 
         const workflowColumns = [
@@ -133,7 +133,7 @@
                 editor: "date",
                 formatter: "datetime",
                 formatterParams: {
-                    outputFormat: "MM/DD/YY"
+                    outputFormat: "MM/DD"
                 }
             },
             { 
@@ -142,19 +142,19 @@
                 editor: "date",
                 formatter: "datetime",
                 formatterParams: {
-                    outputFormat: "MM/DD/YY"
+                    outputFormat: "MM/DD"
                 }
             },
 
 
             // Inspection Completion (T-V)
             { 
-                title: "Completion Date", 
-                field: "completion_date", 
+                title: "Inspection Completed Date", 
+                field: "complete_date", 
                 editor: "date",
                 formatter: "datetime",
                 formatterParams: {
-                    outputFormat: "MM/DD/YY"
+                    outputFormat: "MM/DD"
                 }
             },
             { title: "New GR", field: "new_gr", editor: "input" },
@@ -169,218 +169,233 @@
 
             // Report Tasks - Inspector (W-Z)
             {
-                title: "Report Body",
-                field: "report_body",
-                editor: "select",
-                editorParams: {
-                    values: ["Not Started", "In Progress", "Complete"]
-                },
-                formatter: function(cell) {
-                    const value = cell.getValue();
-                    if (value === "Complete") {
-                        cell.getElement().style.backgroundColor = "#4caf50";
-                    } else if (value === "In Progress") {
-                        cell.getElement().style.backgroundColor = "#fff176";
+                title: "Report to ATL",
+                field: "report_to_atl",
+                editor: "date",
+                formatter: [
+                    "datetime",
+                    function(cell) {
+                        const value = cell.getValue();
+                        if (value === "") {
+                            cell.getElement().style.backgroundColor = "#4caf50";
+                        } else {
+                            cell.getElement().style.backgroundColor = "#fff176";
+                        }
+                        return value;
                     }
-                    return value;
+                ],
+                formatterParams: {
+                    outputFormat: "MM/DD"
                 }
             },
             {
-                title: "QC Submit",
-                field: "qc_submit",
-                editor: "select",
-                editorParams: {
-                    values: ["Not Started", "In Progress", "Complete"]
-                },
-                formatter: function(cell) {
-                    const value = cell.getValue();
-                    if (value === "Complete") {
-                        cell.getElement().style.backgroundColor = "#4caf50";
-                    } else if (value === "In Progress") {
-                        cell.getElement().style.backgroundColor = "#fff176";
+                title: "Report to QC",
+                field: "report_to_qc",
+                editor: "date",
+                formatter: [
+                    "datetime",
+                    function(cell) {
+                        const value = cell.getValue();
+                        if (value === "") {
+                            cell.getElement().style.backgroundColor = "#4caf50";
+                        } else {
+                            cell.getElement().style.backgroundColor = "#fff176";
+                        }
+                        return value;
                     }
-                    return value;
+                ],
+                formatterParams: {
+                    outputFormat: "MM/DD"
                 }
             },
             {
-                title: "Inventory QC",
+                title: "Inventory to QC",
                 field: "inventory_qc",
-                editor: "select",
-                editorParams: {
-                    values: ["Not Started", "In Progress", "Complete"]
-                },
-                formatter: function(cell) {
-                    const value = cell.getValue();
-                    if (value === "Complete") {
-                        cell.getElement().style.backgroundColor = "#4caf50";
-                    } else if (value === "In Progress") {
-                        cell.getElement().style.backgroundColor = "#fff176";
+                editor: "date",
+                formatter: [
+                    "datetime",
+                    function(cell) {
+                        const value = cell.getValue();
+                        if (value === "") {
+                            cell.getElement().style.backgroundColor = "#4caf50";
+                        } else {
+                            cell.getElement().style.backgroundColor = "#fff176";
+                        }
+                        return value;
                     }
-                    return value;
+                ],
+                formatterParams: {
+                    outputFormat: "MM/DD"
                 }
             },
             {
-                title: "LRFCF Submit",
+                title: "LRFCF Submitted",
                 field: "lrfcf_submit",
-                editor: "select",
-                editorParams: {
-                    values: ["Not Started", "In Progress", "Complete", "N/A"]
-                },
-                formatter: function(cell) {
-                    const value = cell.getValue();
-                    if (value === "Complete") {
-                        cell.getElement().style.backgroundColor = "#4caf50";
-                    } else if (value === "In Progress") {
-                        cell.getElement().style.backgroundColor = "#fff176";
-                    } else if (value === "N/A") {
-                        cell.getElement().style.backgroundColor = "#e0e0e0";
+                editor: "date",
+                formatter: [
+                    "datetime",
+                    function(cell) {
+                        const value = cell.getValue();
+                        if (value === "") {
+                            cell.getElement().style.backgroundColor = "#4caf50";
+                        } else {
+                            cell.getElement().style.backgroundColor = "#fff176";
+                        }
+                        return value;
                     }
-                    return value;
+                ],
+                formatterParams: {
+                    outputFormat: "MM/DD"
                 }
             },
 
             // QC Review Process (AA-AB)
             {
                 title: "QC Comments Received",
-                field: "qc_comments_received",
+                field: "qc_received",
                 editor: "date",
                 formatter: "datetime",
                 formatterParams: {
-                    outputFormat: "MM/DD/YY"
+                    outputFormat: "MM/DD"
+                }
+            },
+            {
+                title: "QC Comments Assigned To",
+                field: "qc_assigned",
+                editor: "select",
+                editorParams: {
+                    values: ["TL", "ATL"]
+                },
+                formatter: function(cell) {
+                    const value = cell.getValue();
+                    if (value === "TL") {
+                        cell.getElement().style.backgroundColor = "#4caf50";
+                    } else if (value === "ATL") {
+                        cell.getElement().style.backgroundColor = "#fff176";
+                    }
+                    return value;
                 }
             },
             {
                 title: "QC Comments Addressed",
-                field: "qc_comments_addressed",
+                field: "qc_addressed",
                 editor: "date",
                 formatter: "datetime",
                 formatterParams: {
-                    outputFormat: "MM/DD/YY"
+                    outputFormat: "MM/DD"
                 }
             },
 
             // Assistant Tasks (AC-AG)
             {
-                title: "Field Sketches",
-                field: "field_sketches",
-                editor: "select",
-                editorParams: {
-                    values: ["Not Started", "In Progress", "Complete"]
-                },
-                formatter: function(cell) {
-                    const value = cell.getValue();
-                    if (value === "Complete") {
-                        cell.getElement().style.backgroundColor = "#4caf50";
-                    } else if (value === "In Progress") {
-                        cell.getElement().style.backgroundColor = "#fff176";
+                title: "Field Sketches Updated",
+                field: "update_sketches",
+                editor: "date",
+                formatter: [
+                    "datetime",
+                    function(cell) {
+                        const value = cell.getValue();
+                        if (value === "") {
+                            cell.getElement().style.backgroundColor = "#4caf50";
+                        } else {
+                            cell.getElement().style.backgroundColor = "#fff176";
+                        }
+                        return value;
                     }
-                    return value;
+                ],
+                formatterParams: {
+                    outputFormat: "MM/DD"
                 }
             },
             {
-                title: "Photos Upload",
-                field: "photos_upload",
-                editor: "select",
-                editorParams: {
-                    values: ["Not Started", "Complete", "N/A"]
-                },
-                formatter: function(cell) {
-                    const value = cell.getValue();
-                    if (value === "Complete") {
-                        cell.getElement().style.backgroundColor = "#4caf50";
-                    } else if (value === "N/A") {
-                        cell.getElement().style.backgroundColor = "#e0e0e0";
+                title: "Standards Updated",
+                field: "stds_upload",
+                editor: "date",
+                formatter: [
+                    "datetime",
+                    function(cell) {
+                        const value = cell.getValue();
+                        if (value === "") {
+                            cell.getElement().style.backgroundColor = "#4caf50";
+                        } else {
+                            cell.getElement().style.backgroundColor = "#fff176";
+                        }
+                        return value;
                     }
-                    return value;
+                ],
+                formatterParams: {
+                    outputFormat: "MM/DD"
                 }
             },
             {
-                title: "InspectTech",
-                field: "inspect_tech",
-                editor: "select",
-                editorParams: {
-                    values: ["Not Started", "In Progress", "Complete"]
-                },
-                formatter: function(cell) {
-                    const value = cell.getValue();
-                    if (value === "Complete") {
-                        cell.getElement().style.backgroundColor = "#4caf50";
-                    } else if (value === "In Progress") {
-                        cell.getElement().style.backgroundColor = "#fff176";
+                title: "Report Uploaded to BDIS",
+                field: "report_to_bdis",
+                editor: "date",
+                formatter: [
+                    "datetime",
+                    function(cell) {
+                        const value = cell.getValue();
+                        if (value === "") {
+                            cell.getElement().style.backgroundColor = "#4caf50";
+                        } else {
+                            cell.getElement().style.backgroundColor = "#fff176";
+                        }
+                        return value;
                     }
-                    return value;
+                ],
+                formatterParams: {
+                    outputFormat: "MM/DD"
                 }
             },
             {
-                title: "SharePoint",
+                title: "Files Uploaded to SharePoint",
                 field: "sharepoint",
-                editor: "select",
-                editorParams: {
-                    values: ["Not Started", "Complete"]
-                },
-                formatter: function(cell) {
-                    const value = cell.getValue();
-                    if (value === "Complete") {
-                        cell.getElement().style.backgroundColor = "#4caf50";
+                editor: "date",
+                formatter: [
+                    "datetime",
+                    function(cell) {
+                        const value = cell.getValue();
+                        if (value === "") {
+                            cell.getElement().style.backgroundColor = "#4caf50";
+                        } else {
+                            cell.getElement().style.backgroundColor = "#fff176";
+                        }
+                        return value;
                     }
-                    return value;
+                ],
+                formatterParams: {
+                    outputFormat: "MM/DD"
                 }
             },
             {
-                title: "Database",
-                field: "database",
-                editor: "select",
-                editorParams: {
-                    values: ["Not Started", "Complete"]
-                },
-                formatter: function(cell) {
-                    const value = cell.getValue();
-                    if (value === "Complete") {
-                        cell.getElement().style.backgroundColor = "#4caf50";
+                title: "Tracking Database Updated",
+                field: "update_database",
+                editor: "date",
+                formatter: [
+                    "datetime",
+                    function(cell) {
+                        const value = cell.getValue();
+                        if (value === "") {
+                            cell.getElement().style.backgroundColor = "#4caf50";
+                        } else {
+                            cell.getElement().style.backgroundColor = "#fff176";
+                        }
+                        return value;
                     }
-                    return value;
+                ],
+                formatterParams: {
+                    outputFormat: "MM/DD"
                 }
             },
 
             // Statistics (AH-AP)
-            {
-                title: "Days Since Due",
-                field: "days_since_due",
-                formatter: function(cell) {
-                    const dueDate = cell.getRow().getData().due;
-                    if (!dueDate) return "";
-                    const today = new Date();
-                    const due = new Date(dueDate);
-                    return Math.floor((today - due) / (1000 * 60 * 60 * 24));
-                }
-            },
-            {
-                title: "Days Since Folder",
-                field: "days_since_folder",
-                formatter: function(cell) {
-                    const receivedDate = cell.getRow().getData().folder_received;
-                    if (!receivedDate) return "";
-                    const today = new Date();
-                    const received = new Date(receivedDate);
-                    return Math.floor((today - received) / (1000 * 60 * 60 * 24));
-                }
-            },
-            {
-                title: "Field to Report",
-                field: "field_to_report",
-                formatter: function(cell) {
-                    const data = cell.getRow().getData();
-                    if (!data.completion_date || !data.report_body || data.report_body !== "Complete") return "";
-                    const fieldDate = new Date(data.completion_date);
-                    const reportDate = new Date(data.report_body_date);
-                    return Math.floor((reportDate - fieldDate) / (1000 * 60 * 60 * 24));
-                }
-            }
+
         ];
+
 
         // Initialize Tabulator
         table = new Tabulator("#bridges-table", {
-            columns: columns,
+            columns: coreColumns + workflowColumns,
             ajaxURL: "/api/bridges",
             layout: "fitColumns",
             movableColumns: true,
