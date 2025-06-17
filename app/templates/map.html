@@ -807,8 +807,13 @@
     document.addEventListener("DOMContentLoaded", function () {
         // Initialize map first
         map = L.map('map', {
-            zoomControl: false
-        }).setView([43.0, -75.0], 7);
+            maxBounds: [
+                [40, -80],  // Southwest coordinates of NY
+                [45.5, -71.00000]   // Northeast coordinates of NY
+            ],
+            maxBoundsViscosity: 0.8,  // Prevents dragging outside of bounds
+            minZoom: 8  // Prevents zooming out too far
+        }).setView([42.917431, -75.570647], 8);  // Center of NY State
         
         // Initialize markers layer group after map is created
         markersGroup = L.layerGroup().addTo(map);
@@ -816,7 +821,11 @@
         map.on('zoomend', updateBinLabelVisibility);
         
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
+            attribution: '© OpenStreetMap contributors',
+            bounds: [
+                [40, -80.5],
+                [45.5, -71.5]
+            ]
         }).addTo(map);
 
         // Panel toggle setup

@@ -104,8 +104,8 @@
         const coreColumns = [
             // Bridge Identification (A-J)
             { title: "BIN", field: "bin", headerFilter: "input" },
-            { title: "LAT", field: "lat" },
-            { title: "LON", field: "lon" },
+            { title: "Latitude", field: "lat" },
+            { title: "Longitude", field: "lon" },
             { title: "Region", field: "region" },
             { title: "County", field: "county" },
             { title: "Due Date", field: "due" },
@@ -395,7 +395,7 @@
 
         // Initialize Tabulator
         table = new Tabulator("#bridges-table", {
-            columns: coreColumns + workflowColumns,
+            columns: [...coreColumns, ...workflowColumns],
             ajaxURL: "/api/bridges",
             layout: "fitColumns",
             movableColumns: true,
