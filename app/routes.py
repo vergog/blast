@@ -1,7 +1,10 @@
-from flask import Blueprint, jsonify, request, render_template, current_app
+from flask import Blueprint, jsonify, request, render_template, current_app, flash, redirect, url_for
 from flask_socketio import emit
+from werkzeug.utils import secure_filename
+import os
 from .models import Bridge
 from . import db, socketio
+from .data_importer import import_bridges_from_excel, clear_bridge_data
 
 main = Blueprint('main', __name__)
 
@@ -159,6 +162,72 @@ def delete_bridge(bin):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+@main.route('/admin/import', methods=['GET', 'POST'])
+def import_data():
+    """Route for importing bridge data from Excel file"""
+    if request.method == 'GET':
+        return render_template('admin/import.html')
+    
+    if request.method == 'POST':
+        # Check if file was uploaded
+        if 'excel_file' not in request.files:
+            flash('No file selected', 'error')
+            return redirect(request.url)
+        
+        file = request.files['excel_file']
+        
+        if file.filename == '':
+            flash('No file selected', 'error')
+            return redirect(request.url)
+        
+        if file and allowed_file(file.filename):
+            # Save uploaded file temporarily
+            filename = secure_filename(file.filename)
+            temp_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+            file.save(temp_path)
+            
+            try:
+                # Clear existing data if requested
+                if request.form.get('clear_existing'):
+                    clear_result = clear_bridge_data()
+                    if not clear_result['success']:
+                        flash(f'Error clearing existing data: {clear_result["error"]}', 'error')
+                        return redirect(request.url)
+                
+                # Import data
+                result = import_bridges_from_excel(temp_path)
+                
+                # Clean up temp file
+                os.remove(temp_path)
+                
+                if result['success']:
+                    flash(f'Import successful! Imported: {result["imported"]}, Updated: {result["updated"]}, Errors: {result["errors"]}', 'success')
+                else:
+                    flash(f'Import failed: {result["error"]}', 'error')
+                
+            except Exception as e:
+                # Clean up temp file on error
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+                flash(f'Import error: {str(e)}', 'error')
+            
+            return redirect(url_for('main.import_data'))
+        else:
+            flash('Invalid file type. Please upload an Excel file (.xlsx or .xls)', 'error')
+            return redirect(request.url)
+
+def allowed_file(filename):
+    """Check if uploaded file is an allowed Excel file"""
+    ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@main.route('/api/import/status')
+def import_status():
+    """API endpoint to get current bridge count"""
+    count = Bridge.query.count()
+    return jsonify({'bridge_count': count})
+
 # Add this to your SocketIO event handlers
 
 @socketio.on('coordinate_update')
@@ -172,5 +241,28 @@ def handle_coordinate_update(data):
 def handle_new_bridge(data):
     print('Received new_bridge event:', data)
     emit('new_bridge', data)
+
+@main.route('/api/debug/bridges')
+def debug_bridges():
+    """Debug endpoint to see raw bridge data"""
+    bridges = Bridge.query.limit(5).all()  # Get first 5 bridges
+    debug_data = []
+    
+    for bridge in bridges:
+        debug_data.append({
+            'bin': bridge.bin,
+            'lat': bridge.lat,
+            'lat_type': type(bridge.lat).__name__,
+            'lon': bridge.lon,
+            'lon_type': type(bridge.lon).__name__,
+            'due': bridge.due,
+            'county': bridge.county,
+            'region': bridge.region
+        })
+    
+    return jsonify({
+        'count': Bridge.query.count(),
+        'sample_data': debug_data
+    })
 
 

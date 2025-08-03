@@ -328,6 +328,45 @@
         border: none;
     }
 
+    .toggle-switch {
+        display: flex;
+        gap: 2px;
+        align-items: center;
+    }
+
+    .switch-btn {
+        font-size: 11px;
+        padding: 2px 8px;
+        background: #f5f5f5;
+        border: 1px solid #ccc;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        color: #666;
+    }
+
+    .switch-btn:first-child {
+        border-radius: 4px 0 0 4px;
+    }
+
+    .switch-btn:nth-child(2) {
+        border-radius: 0 4px 4px 0;
+        border-left: none;
+    }
+
+    .switch-btn.active {
+        background: #007bff;
+        color: white;
+        border-color: #007bff;
+    }
+
+    .switch-btn:hover:not(.active) {
+        background: #e9ecef;
+    }
+
+    .collapse-toggle {
+        margin-left: 8px;
+    }
+
     </style>
 </head>
 <!---->
@@ -398,30 +437,32 @@
 
         <!-- Field Week -->
         <div class="filter-group">
-          <div class="filter-header">
-            <strong>Field Week</strong>
-            <div>
-              <button class="toggle-btn" data-group="week">All / None</button>
-              <button class="collapse-toggle" data-target="filter-week-content">+</button>
+            <div class="filter-header">
+                <strong>Field Week</strong>
+                <div class="toggle-switch">
+                    <button class="switch-btn active" data-group="week" data-action="all">All</button>
+                    <button class="switch-btn" data-group="week" data-action="none">None</button>
+                    <button class="collapse-toggle" data-target="filter-week-content">+</button>
+                </div>
             </div>
-          </div>
-          <div id="filter-week-content" class="collapsible-content collapsed">
-            <div id="filter-week-items"></div>
-          </div>
+            <div id="filter-week-content" class="collapsible-content collapsed">
+                <div id="filter-week-items"></div>
+            </div>
         </div>
-          
+
         <!-- Due Month -->
         <div class="filter-group">
-          <div class="filter-header">
-            <strong>Due Month</strong>
-            <div>
-              <button class="toggle-btn" data-group="due_month">All / None</button>
-              <button class="collapse-toggle" data-target="filter-due_month-content">+</button>
+            <div class="filter-header">
+                <strong>Due Month</strong>
+                <div class="toggle-switch">
+                    <button class="switch-btn active" data-group="due_month" data-action="all">All</button>
+                    <button class="switch-btn" data-group="due_month" data-action="none">None</button>
+                    <button class="collapse-toggle" data-target="filter-due_month-content">+</button>
+                </div>
             </div>
-          </div>
-          <div id="filter-due_month-content" class="collapsible-content collapsed">
-            <div id="filter-due_month-items"></div>
-          </div>
+            <div id="filter-due_month-content" class="collapsible-content collapsed">
+                <div id="filter-due_month-items"></div>
+            </div>
         </div>
           
 
@@ -628,16 +669,7 @@
         }
     });
 
-    // Helper function to determine bridge status
-    function getStatus(bridge) {
-        const inspected = bridge.completed && bridge.completed.trim() !== "";
-        const scheduled = !inspected && 
-            bridge.week && 
-            bridge.week.trim() !== "" && 
-            bridge.week.trim().toLowerCase() !== "unscheduled";
-        
-        return inspected ? "Inspected" : scheduled ? "Scheduled" : "Assigned";
-    }
+
 
     // Replace or update these helper functions
     function getBridgeStatus(bridge) {
@@ -709,47 +741,140 @@
     // Function to create filter checkboxes
     function createFilterCheckboxes() {
         const unique = {
-            flags: new Set(),
-            posting: new Set(),
-            access: new Set(),
             week: new Set(),
             due_month: new Set()
         };
 
-        // Gather unique values
-        bridgeData.forEach(b => {
-            unique.flags.add(b.flags);
-            unique.posting.add(b.posting);
-            unique.access.add(b.access);
-            unique.week.add(b.week);
-            unique.due_month.add(b.due_month);
+        // Debug: Log some sample due dates first
+        console.log("Sample due dates from bridgeData:");
+        bridgeData.slice(0, 10).forEach((b, i) => {
+            console.log(`Bridge ${i}: BIN=${b.bin}, due="${b.due}", type=${typeof b.due}`);
         });
 
-        // Create checkboxes for each filter group with custom sorting
-        function createCheckbox(containerId, groupKey, values) {
-            const container = document.getElementById(containerId);
-            
-            // Sort values with custom logic
-            let sortedValues = Array.from(values);
-            if (groupKey === 'flags' || groupKey === 'posting' || groupKey === 'access') {
-                // Put "Yes" first, then "No", then any other values
-                sortedValues.sort((a, b) => {
-                    if (a === "Yes" && b === "No") return -1;
-                    if (a === "No" && b === "Yes") return 1;
-                    if (a === "Yes") return -1;
-                    if (b === "Yes") return 1;
-                    if (a === "No") return -1;
-                    if (b === "No") return 1;
-                    return a.localeCompare(b);
-                });
-            } else if (groupKey === 'week') {
-                sortedValues = pushUnscheduledToEnd(sortWeeks(values));
-            } else if (groupKey === 'due_month') {
-                sortedValues = sortMonths(values);
+        // Gather unique values for week and derive due_month from due date
+        bridgeData.forEach(b => {
+            // Week filtering (if field has data)
+            if (b.week != null && b.week !== '') {
+                unique.week.add(b.week);
             }
+            
+            // Due month - extract from due date with multiple format handling
+            if (b.due != null && b.due !== '') {
+                try {
+                    let monthNum = null;
+                    const dueStr = String(b.due).trim();
+                    
+                    console.log(`Processing due date: "${dueStr}" for bridge ${b.bin}`);
+                    
+                    // Try different date formats
+                    if (dueStr.includes('/')) {
+                        // Format: "3/15" or "03/15" or "2025-03-15"
+                        const parts = dueStr.split('/');
+                        if (parts.length >= 2) {
+                            monthNum = parseInt(parts[0], 10);
+                        }
+                    } else if (dueStr.includes('-')) {
+                        // Format: "2025-03-15" or "03-15" 
+                        const parts = dueStr.split('-');
+                        if (parts.length === 3) {
+                            // Format: "2025-03-15"
+                            monthNum = parseInt(parts[1], 10);
+                        } else if (parts.length === 2) {
+                            // Format: "03-15"
+                            monthNum = parseInt(parts[0], 10);
+                        }
+                    } else if (dueStr.length >= 4 && !isNaN(dueStr)) {
+                        // Format: "0315" (MMDD)
+                        monthNum = parseInt(dueStr.substring(0, 2), 10);
+                    } else {
+                        // Try to parse as a date object
+                        const date = new Date(dueStr);
+                        if (!isNaN(date.getTime())) {
+                            monthNum = date.getMonth() + 1; // getMonth() returns 0-11
+                        }
+                    }
+                    
+                    if (monthNum && monthNum >= 1 && monthNum <= 12) {
+                        const monthNames = [
+                            "January", "February", "March", "April", "May", "June",
+                            "July", "August", "September", "October", "November", "December"
+                        ];
+                        const monthName = monthNames[monthNum - 1];
+                        unique.due_month.add(monthName);
+                        console.log(`  -> Extracted month: ${monthName} (${monthNum})`);
+                    } else {
+                        console.log(`  -> Could not extract valid month from "${dueStr}"`);
+                    }
+                } catch (error) {
+                    console.warn(`Error parsing due date for bridge ${b.bin}: ${b.due}`, error);
+                }
+            }
+        });
 
-            sortedValues.forEach(val => {
-                const safeId = `${containerId}-${val.replace(/\W+/g, "_")}`;
+        console.log("Unique weeks found:", Array.from(unique.week));
+        console.log("Unique due months found:", Array.from(unique.due_month));
+
+        // Create Yes/No checkboxes for flags, posting, and access
+        createYesNoCheckbox("filter-flags", "flags");
+        createYesNoCheckbox("filter-posting", "posting");
+        createYesNoCheckbox("filter-access", "access");
+
+        // Create dynamic checkboxes for week and due_month
+        createCheckbox("filter-week-items", "week", Array.from(unique.week));
+        createCheckbox("filter-due_month-items", "due_month", Array.from(unique.due_month));
+    }
+
+    // New function to create Yes/No checkboxes
+    function createYesNoCheckbox(containerId, groupKey) {
+        const container = document.getElementById(containerId);
+        
+        // Clear any existing content
+        container.innerHTML = "";
+        
+        // Create Yes checkbox
+        const yesLabel = document.createElement("label");
+        yesLabel.innerHTML = `
+            <input type="checkbox" 
+                id="${containerId}-yes" 
+                value="Yes" 
+                data-group="${groupKey}" 
+                checked> Yes`;
+        container.appendChild(yesLabel);
+        
+        // Create No checkbox
+        const noLabel = document.createElement("label");
+        noLabel.innerHTML = `
+            <input type="checkbox" 
+                id="${containerId}-no" 
+                value="No" 
+                data-group="${groupKey}" 
+                checked> No`;
+        container.appendChild(noLabel);
+        
+        // Initialize filter set with both values
+        filters[groupKey].add("Yes");
+        filters[groupKey].add("No");
+    }
+
+    // Update the existing createCheckbox function (keep it for week and due_month):
+    function createCheckbox(containerId, groupKey, values) {
+        const container = document.getElementById(containerId);
+        
+        // Clear any existing content
+        container.innerHTML = "";
+        
+        // Sort values with custom logic
+        let sortedValues = Array.from(values).filter(val => val != null && val !== '');
+        
+        if (groupKey === 'week') {
+            sortedValues = pushUnscheduledToEnd(sortWeeks(values.filter(v => v != null && v !== '')));
+        } else if (groupKey === 'due_month') {
+            sortedValues = sortMonths(values.filter(v => v != null && v !== ''));
+        }
+
+        sortedValues.forEach(val => {
+            if (val != null && val !== '') {
+                const safeId = `${containerId}-${String(val).replace(/\W+/g, "_")}`;
                 const label = document.createElement("label");
                 label.innerHTML = `
                     <input type="checkbox" 
@@ -759,31 +884,93 @@
                         checked> ${val}`;
                 container.appendChild(label);
                 filters[groupKey].add(val);
-            });
-        }
-
-        // Initialize each filter group
-        createCheckbox("filter-flags", "flags", Array.from(unique.flags));
-        createCheckbox("filter-posting", "posting", Array.from(unique.posting));
-        createCheckbox("filter-access", "access", Array.from(unique.access));
-        createCheckbox("filter-week-items", "week", 
-            pushUnscheduledToEnd(sortWeeks(unique.week)));
-        createCheckbox("filter-due_month-items", "due_month", 
-            sortMonths(unique.due_month));
+            }
+        });
     }
 
-    // Function to check if a bridge passes all current filters
+  
+    let explicitlyEmptyFilters = {
+        flags: false,
+        posting: false,
+        access: false,
+        week: false,
+        due_month: false
+    };
+
+    // Update the passesFilters function:
     function passesFilters(bridge) {
-        const status = getStatus(bridge);
+        const status = getBridgeStatus(bridge); 
         if (!filters.status.has(status)) return false;
 
-        return (
-            filters.flags.has(bridge.flags) &&
-            filters.posting.has(bridge.posting) &&
-            filters.access.has(bridge.access) &&
-            filters.week.has(bridge.week) &&
-            filters.due_month.has(bridge.due_month)
-        );
+        // Handle Yes/No filters for flags, posting, and access
+        const hasFlags = bridge.flags && bridge.flags.trim() !== '';
+        const hasPosting = bridge.posting && bridge.posting.trim() !== '';
+        const hasAccess = bridge.access && bridge.access.trim() !== '';
+        
+        const flagsFilter = hasFlags ? "Yes" : "No";
+        const postingFilter = hasPosting ? "Yes" : "No";
+        const accessFilter = hasAccess ? "Yes" : "No";
+
+        // Handle week filter (direct field comparison)
+        const week = bridge.week || '';
+
+        // Handle due_month filter - every bridge has a due date
+        let bridgeDueMonth = '';
+        if (bridge.due) {
+            try {
+                let monthNum = null;
+                const dueStr = String(bridge.due).trim();
+                
+                if (dueStr.includes('/')) {
+                    const parts = dueStr.split('/');
+                    if (parts.length >= 2) {
+                        monthNum = parseInt(parts[0], 10);
+                    }
+                } else if (dueStr.includes('-')) {
+                    const parts = dueStr.split('-');
+                    if (parts.length === 3) {
+                        monthNum = parseInt(parts[1], 10);
+                    } else if (parts.length === 2) {
+                        monthNum = parseInt(parts[0], 10);
+                    }
+                } else if (dueStr.length >= 4 && !isNaN(dueStr)) {
+                    monthNum = parseInt(dueStr.substring(0, 2), 10);
+                } else {
+                    const date = new Date(dueStr);
+                    if (!isNaN(date.getTime())) {
+                        monthNum = date.getMonth() + 1;
+                    }
+                }
+                
+                if (monthNum && monthNum >= 1 && monthNum <= 12) {
+                    const monthNames = [
+                        "January", "February", "March", "April", "May", "June",
+                        "July", "August", "September", "October", "November", "December"
+                    ];
+                    bridgeDueMonth = monthNames[monthNum - 1];
+                }
+            } catch (error) {
+                console.warn(`Error parsing due date for bridge ${bridge.bin}: ${bridge.due}`);
+            }
+        }
+
+        // FIXED: Check each filter with explicit "none" handling
+        if (filters.flags.size > 0 && !filters.flags.has(flagsFilter)) return false;
+        if (explicitlyEmptyFilters.flags && filters.flags.size === 0) return false; // Hide all when explicitly set to "none"
+        
+        if (filters.posting.size > 0 && !filters.posting.has(postingFilter)) return false;
+        if (explicitlyEmptyFilters.posting && filters.posting.size === 0) return false;
+        
+        if (filters.access.size > 0 && !filters.access.has(accessFilter)) return false;
+        if (explicitlyEmptyFilters.access && filters.access.size === 0) return false;
+        
+        if (filters.week.size > 0 && !filters.week.has(week)) return false;
+        if (explicitlyEmptyFilters.week && filters.week.size === 0) return false;
+        
+        if (filters.due_month.size > 0 && !filters.due_month.has(bridgeDueMonth)) return false;
+        if (explicitlyEmptyFilters.due_month && filters.due_month.size === 0) return false; // FIXED: Hide all when "None" is clicked
+
+        return true;
     }
 
     // Update markers based on current filters
@@ -802,6 +989,24 @@
 
         document.getElementById("visibleCounter").textContent = 
             `Visible Bridges: ${visibleCount}`;
+    }
+    
+    function updateBinLabelVisibility() {
+        if (!map) return;
+        const zoom = map.getZoom();
+        const showLabels = zoom >= 11;
+
+        allMarkers.forEach(({ marker, label }) => {
+            if (label && map.hasLayer(marker)) {
+                if (showLabels) {
+                    if (!map.hasLayer(label)) map.addLayer(label);
+                } else {
+                    if (map.hasLayer(label)) map.removeLayer(label);
+                }
+            } else if (label && map.hasLayer(label)) {
+                map.removeLayer(label);
+            }
+        });
     }
 
     document.addEventListener("DOMContentLoaded", function () {
@@ -1028,39 +1233,87 @@
                         const group = cb.dataset.group;
                         const val = cb.value;
                         
+                        // Reset explicit empty state when manually checking/unchecking
+                        explicitlyEmptyFilters[group] = false;
+                        
                         if (cb.checked) {
                             filters[group].add(val);
                         } else {
                             filters[group].delete(val);
                         }
                         
+                        // Update switch button states based on checkbox states
+                        updateSwitchButtonStates(group);
+                        
                         updateMarkers();
                         updateBinLabelVisibility();
                     });
                 });
 
-                // Set up All/None toggle buttons
-                document.querySelectorAll(".toggle-btn").forEach(btn => {
+                document.querySelectorAll(".switch-btn").forEach(btn => {
                     btn.addEventListener("click", () => {
                         const group = btn.dataset.group;
+                        const action = btn.dataset.action;
+                        
+                        // Update button states - make clicked button active, others inactive
+                        const switchGroup = btn.parentElement;
+                        switchGroup.querySelectorAll('.switch-btn').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        
+                        // Get all checkboxes for this group
                         const checkboxes = document.querySelectorAll(
-                            `#filter-${group}-content input[type=checkbox]`
+                            `#filter-${group}-content input[type=checkbox], #filter-${group} input[type=checkbox]`
                         );
                         
-                        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-                        filters[group].clear();  // reset group
-
-                        checkboxes.forEach(cb => {
-                            cb.checked = !allChecked;
-                            if (!allChecked) {
+                        // Clear the filter group
+                        filters[group].clear();
+                        
+                        if (action === 'all') {
+                            // Set all checkboxes to checked and add to filters
+                            explicitlyEmptyFilters[group] = false;
+                            checkboxes.forEach(cb => {
+                                cb.checked = true;
                                 filters[group].add(cb.value);
-                            }
-                        });
+                            });
+                        } else if (action === 'none') {
+                            // Set all checkboxes to unchecked and mark as explicitly empty
+                            explicitlyEmptyFilters[group] = true;
+                            checkboxes.forEach(cb => {
+                                cb.checked = false;
+                            });
+                        }
 
                         updateMarkers();
                         updateBinLabelVisibility();
                     });
                 });
+
+                // Add this new function to update switch button states:
+                function updateSwitchButtonStates(group) {
+                    const checkboxes = document.querySelectorAll(
+                        `#filter-${group}-content input[type=checkbox], #filter-${group} input[type=checkbox]`
+                    );
+                    
+                    const switchButtons = document.querySelectorAll(`.switch-btn[data-group="${group}"]`);
+                    const allButton = Array.from(switchButtons).find(btn => btn.dataset.action === 'all');
+                    const noneButton = Array.from(switchButtons).find(btn => btn.dataset.action === 'none');
+                    
+                    if (!allButton || !noneButton) return;
+                    
+                    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+                    const noneChecked = Array.from(checkboxes).every(cb => !cb.checked);
+                    
+                    // Clear all active states first
+                    switchButtons.forEach(btn => btn.classList.remove('active'));
+                    
+                    if (allChecked) {
+                        allButton.classList.add('active');
+                    } else if (noneChecked) {
+                        noneButton.classList.add('active');
+                    }
+                    // If some are checked and some aren't, no button is active (mixed state)
+                }
+
 
                 // Replace the existing searchbar code inside the fetch .then() callback
                 const searchInput = document.getElementById("binSearchInput");
@@ -1266,24 +1519,7 @@
         }
     });
 
-    // Add this function with your other utility functions
-    function updateBinLabelVisibility() {
-        if (!map) return;
-        const zoom = map.getZoom();
-        const showLabels = zoom >= 11;
 
-        allMarkers.forEach(({ marker, label }) => {
-            if (label && map.hasLayer(marker)) {
-                if (showLabels) {
-                    if (!map.hasLayer(label)) map.addLayer(label);
-                } else {
-                    if (map.hasLayer(label)) map.removeLayer(label);
-                }
-            } else if (label && map.hasLayer(label)) {
-                map.removeLayer(label);
-            }
-        });
-    }
 
 
 

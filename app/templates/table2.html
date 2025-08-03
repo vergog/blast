@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <!-- Tabulator -->
-    <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
-    <script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+    <link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator.min.css" rel="stylesheet">
+    <script type="text/javascript" src="https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js"></script>
 
     <!-- Socket.IO -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
@@ -21,13 +21,33 @@
         }
         #bridges-table {
             width: 100%;
-            height: calc(100vh - 50px);
+            height: calc(100vh - 60px);
+            margin-bottom: 0px;
+            overflow-x: auto;
+            position: relative;
+            z-index: 1;
         }
+        
+        .tabulator {
+            min-width: 100%;
+        }
+        
         .controls {
             padding: 10px;
             background: #f5f5f5;
             border-top: 1px solid #ddd;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 53px;
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            pointer-events: all;
+            box-sizing: border-box;
         }
+
         #addBridgeBtn, #saveBridgeBtn {
             padding: 8px 16px;
             color: white;
@@ -52,6 +72,71 @@
         #saveBridgeBtn:hover:not(:disabled) {
             background-color: #1976D2;
         }
+
+        .tabulator .tabulator-cell {
+            padding: 8px 15px;  /* Add more padding to cells */
+        }
+        
+        .tabulator .tabulator-header .tabulator-col {
+            background-color: transparent;
+            padding: 8px 15px;
+            color: white;  /* Keep text white for all headers */
+        }
+
+        /* Custom header colors - apply only to header cells */
+        .tabulator-col.header-bin {
+            background-color: #1b524f !important;
+        }
+
+        .tabulator-col.header-data  {
+            background-color: #00861d !important;
+        }
+
+        .tabulator-col.header-input-data {
+            background-color: #005813 !important;
+        }
+
+        .tabulator-col.header-tracking  {
+            background-color: #410f00 !important;
+        }
+
+        .tabulator-col.header-field  {
+            background-color: #ff6600 !important;
+        }
+
+        .tabulator-col.header-complete  {
+            background-color: #36008d !important;
+        }
+        .tabulator-col.header-tltask  {
+            background-color: #1178ff !important;
+        }
+        .tabulator-col.header-atltask  {
+            background-color: #ad1b1b !important;
+        }
+        .tabulator-col.header-statistics  {
+            background-color: #292929 !important;
+        }
+
+        .tabulator .tabulator-row .tabulator-frozen {
+
+            border-right: 2px solid #ddd !important;
+            z-index: 12 !important;
+        }
+
+        .tabulator .tabulator-header .tabulator-frozen {
+            position: sticky !important;
+            left: 0 !important;
+            z-index: 13 !important;
+            background-color: #1b524f !important; 
+        }
+
+
+        .tabulator .tabulator-row .tabulator-frozen {
+            box-shadow: 2px 0px 3px rgba(0,0,0,0.1);
+        }
+
+
+
     </style>
 </head>
 <body>
@@ -100,28 +185,90 @@
             }
         });
 
+        const DateTime = luxon.DateTime;
+
+        // Create a separate read-only date config
+        const readOnlyDateConfig = {
+            formatter: function(cell) {
+                const value = cell.getValue();
+                if (!value) return "";
+                try {
+                    return DateTime.fromISO(value).toFormat("MM/dd");
+                } catch (e) {
+                    console.warn(`Invalid date format for value: ${value}`);
+                    return value;
+                }
+            }
+            // No editor property - this makes it read-only
+        };
+
+        // Keep the original dateConfig for editable date columns
+        const dateConfig = {
+            formatter: function(cell) {
+                const value = cell.getValue();
+                if (!value) return "";
+                try {
+                    return DateTime.fromISO(value).toFormat("MM/dd");
+                } catch (e) {
+                    console.warn(`Invalid date format for value: ${value}`);
+                    return value;
+                }
+            },
+            editor: "date",
+            editorParams: {
+                inputFormat: "yyyy-MM-dd",
+                outputFormat: "yyyy-MM-dd"
+            }
+        };
+
         // Define table columns
         const coreColumns = [
             // Bridge Identification (A-J)
-            { title: "BIN", field: "bin", headerFilter: "input" },
-            { title: "Latitude", field: "lat" },
-            { title: "Longitude", field: "lon" },
-            { title: "Region", field: "region" },
-            { title: "County", field: "county" },
-            { title: "Due Date", field: "due" },
-            { title: "Previous GR", field: "prev_gr" },
-            { title: "Spans", field: "spans" },
-            { title: "Active Flags", field: "flags" },
-            { title: "Load Posting", field: "posting" },
+            { 
+                title: "BIN", 
+                field: "bin", 
+                headerFilter: "input",
+                cssClass: "header-bin",
+                frozen: true,
+                width: 120,
+                headerSort: true,
+                formatter: "plaintext"
+            },
+            { 
+                title: "Latitude", 
+                field: "lat",
+                cssClass: "header-data",
+                formatter: function(cell) {
+                    const value = cell.getValue();
+                    return value ? Number(value).toFixed(8) : "";
+                }
+            },
+            { 
+                title: "Longitude", 
+                field: "lon",
+                cssClass: "header-data",
+                formatter: function(cell) {
+                    const value = cell.getValue();
+                    return value ? Number(value).toFixed(8) : "";
+                }
+            },
+            { title: "Region", field: "region", cssClass: "header-data" },
+            { title: "County", field: "county", cssClass: "header-data" },
+            { title: "Due Date", field: "due", cssClass: "header-data", ...readOnlyDateConfig },
+            { title: "Spans", field: "spans", cssClass: "header-data" },
+            { title: "Load Posting", field: "posting", cssClass: "header-data" },
+            { title: "Previous GR", field: "prev_gr", editor: "input", cssClass: "header-input-data" },
+            { title: "Active Flags", field: "flags", editor: "input", cssClass: "header-input-data" },
+            
 
             // Field Inspection Planning (M-S)
-            { title: "Field Date", field: "field_date" },
-            { title: "Est. Duration", field: "est_duration" },
-            { title: "Special Access", field: "special_access" },
-            { title: "Notes", field: "notes" },
-            { title: "NSTM", field: "nstm" },
-            { title: "Special Emphasis", field: "spe" },
-            { title: "Standards", field: "stds" }
+            { title: "Field Date", field: "field_date", editor: "date", cssClass: "header-field", ...dateConfig },
+            { title: "Est. Duration", field: "est_duration", editor: "input", cssClass: "header-field" },
+            { title: "Special Access", field: "special_access", editor: "input", cssClass: "header-field" },
+            { title: "Notes", field: "notes", editor: "textarea", cssClass: "header-field" },
+            { title: "NSTM", field: "nstm", editor: "input", cssClass: "header-field" },
+            { title: "Special Emphasis", field: "spe", editor: "input", cssClass: "header-field" },
+            { title: "Standards", field: "stds", editor: "input", cssClass: "header-field" }
         ];
 
         const workflowColumns = [
@@ -131,19 +278,15 @@
                 title: "Folder Received", 
                 field: "folder_received", 
                 editor: "date",
-                formatter: "datetime",
-                formatterParams: {
-                    outputFormat: "MM/DD"
-                }
+                cssClass: "header-tracking",
+                ...dateConfig
             },
             { 
                 title: "Folder Returned", 
                 field: "folder_returned", 
                 editor: "date",
-                formatter: "datetime",
-                formatterParams: {
-                    outputFormat: "MM/DD"
-                }
+                cssClass: "header-tracking",
+                ...dateConfig
             },
 
 
@@ -152,16 +295,19 @@
                 title: "Inspection Completed Date", 
                 field: "complete_date", 
                 editor: "date",
-                formatter: "datetime",
-                formatterParams: {
-                    outputFormat: "MM/DD"
-                }
+                cssClass: "header-complete",
+                ...dateConfig
             },
-            { title: "New GR", field: "new_gr", editor: "input" },
+            { 
+                title: "New GR", 
+                field: "new_gr", 
+                editor: "input",
+                cssClass: "header-complete",},
             { 
                 title: "Flags Issued", 
                 field: "flags_issued", 
                 editor: "select",
+                cssClass: "header-complete",
                 editorParams: {
                     values: ["Yes", "No"]
                 }
@@ -172,6 +318,7 @@
                 title: "Report to ATL",
                 field: "report_to_atl",
                 editor: "date",
+                cssClass: "header-tltask",
                 formatter: [
                     "datetime",
                     function(cell) {
@@ -184,14 +331,13 @@
                         return value;
                     }
                 ],
-                formatterParams: {
-                    outputFormat: "MM/DD"
-                }
+                ...dateConfig
             },
             {
                 title: "Report to QC",
                 field: "report_to_qc",
                 editor: "date",
+                cssClass: "header-tltask",
                 formatter: [
                     "datetime",
                     function(cell) {
@@ -204,14 +350,13 @@
                         return value;
                     }
                 ],
-                formatterParams: {
-                    outputFormat: "MM/DD"
-                }
+                ...dateConfig
             },
             {
                 title: "Inventory to QC",
                 field: "inventory_qc",
                 editor: "date",
+                cssClass: "header-tltask",
                 formatter: [
                     "datetime",
                     function(cell) {
@@ -224,14 +369,13 @@
                         return value;
                     }
                 ],
-                formatterParams: {
-                    outputFormat: "MM/DD"
-                }
+                ...dateConfig
             },
             {
                 title: "LRFCF Submitted",
                 field: "lrfcf_submit",
                 editor: "date",
+                cssClass: "header-tltask",
                 formatter: [
                     "datetime",
                     function(cell) {
@@ -244,9 +388,7 @@
                         return value;
                     }
                 ],
-                formatterParams: {
-                    outputFormat: "MM/DD"
-                }
+                ...dateConfig
             },
 
             // QC Review Process (AA-AB)
@@ -254,15 +396,15 @@
                 title: "QC Comments Received",
                 field: "qc_received",
                 editor: "date",
+                cssClass: "header-tltask",
                 formatter: "datetime",
-                formatterParams: {
-                    outputFormat: "MM/DD"
-                }
+                ...dateConfig
             },
             {
                 title: "QC Comments Assigned To",
                 field: "qc_assigned",
                 editor: "select",
+                cssClass: "header-tltask",
                 editorParams: {
                     values: ["TL", "ATL"]
                 },
@@ -279,17 +421,17 @@
             {
                 title: "QC Comments Addressed",
                 field: "qc_addressed",
+                cssClass: "header-tltask",
                 editor: "date",
                 formatter: "datetime",
-                formatterParams: {
-                    outputFormat: "MM/DD"
-                }
+                ...dateConfig
             },
 
             // Assistant Tasks (AC-AG)
             {
                 title: "Field Sketches Updated",
                 field: "update_sketches",
+                cssClass: "header-atltask",
                 editor: "date",
                 formatter: [
                     "datetime",
@@ -303,13 +445,12 @@
                         return value;
                     }
                 ],
-                formatterParams: {
-                    outputFormat: "MM/DD"
-                }
+                ...dateConfig
             },
             {
                 title: "Standards Updated",
                 field: "stds_upload",
+                cssClass: "header-atltask",
                 editor: "date",
                 formatter: [
                     "datetime",
@@ -323,13 +464,12 @@
                         return value;
                     }
                 ],
-                formatterParams: {
-                    outputFormat: "MM/DD"
-                }
+                ...dateConfig
             },
             {
                 title: "Report Uploaded to BDIS",
                 field: "report_to_bdis",
+                cssClass: "header-atltask",
                 editor: "date",
                 formatter: [
                     "datetime",
@@ -343,13 +483,12 @@
                         return value;
                     }
                 ],
-                formatterParams: {
-                    outputFormat: "MM/DD"
-                }
+                ...dateConfig
             },
             {
                 title: "Files Uploaded to SharePoint",
                 field: "sharepoint",
+                cssClass: "header-atltask",
                 editor: "date",
                 formatter: [
                     "datetime",
@@ -363,13 +502,12 @@
                         return value;
                     }
                 ],
-                formatterParams: {
-                    outputFormat: "MM/DD"
-                }
+                ...dateConfig
             },
             {
                 title: "Tracking Database Updated",
                 field: "update_database",
+                cssClass: "header-atltask",
                 editor: "date",
                 formatter: [
                     "datetime",
@@ -383,13 +521,30 @@
                         return value;
                     }
                 ],
-                formatterParams: {
-                    outputFormat: "MM/DD"
-                }
+                ...dateConfig
             },
 
             // Statistics (AH-AP)
-
+            {
+                title: "TL Turnaround",
+                field: "tl_turnaround",
+                cssClass: "header-statistics"
+            },
+            {
+                title: "ATL Turnaround",
+                field: "atl_turnaround",
+                cssClass: "header-statistics",
+            },
+            {
+                title: "Report to QC",
+                field: "rep_to_qc",
+                cssClass: "header-statistics",
+            },
+            {
+                title: "LRFCF Turnaround",
+                field: "lrfcf_turnaround",
+                cssClass: "header-statistics",
+            },
         ];
 
 
@@ -397,10 +552,25 @@
         table = new Tabulator("#bridges-table", {
             columns: [...coreColumns, ...workflowColumns],
             ajaxURL: "/api/bridges",
-            layout: "fitColumns",
-            movableColumns: true,
+            
+            layout: "fitData",  
+            movableColumns: false,
             history: true,
             headerFilterLiveFilter: true,
+            responsiveLayout: false,  
+            columnCalcs: "both",
+            autoResize: false,
+            clipboard: "paste",
+            clipboardPasteParser: "table",
+            clipboardPasteAction: "replace",
+            height: "calc(100vh - 70px)",
+            columnDefaults: {
+                resizable: true,
+                tooltip: true,
+                widthGrow: 1,
+                minWidth: 100
+
+            },
             rowContextMenu: [
                 {
                     label: "Delete Bridge",
@@ -445,9 +615,6 @@
 
         // Add separate event listener for cell edits
         table.on("cellEdited", function(cell) {
-            // Don't update if we're adding a new bridge
-            if (isAddingNewBridge) return;
-
             const rowData = cell.getRow().getData();
             const field = cell.getField();
             const value = cell.getValue();
@@ -456,6 +623,21 @@
             // Only proceed if value actually changed
             if (value === oldValue) return;
 
+            // Handle new bridge editing (enable save button)
+            if (isAddingNewBridge) {
+                const row = cell.getRow();
+                const data = row.getData();
+                
+                // Check if we have the minimum required fields
+                const hasRequiredFields = data.bin && data.bin.trim() !== '' && 
+                                         data.lat && data.lat.toString().trim() !== '' && 
+                                         data.lon && data.lon.toString().trim() !== '';
+                
+                document.getElementById('saveBridgeBtn').disabled = !hasRequiredFields;
+                return; // Don't try to update existing bridge
+            }
+
+            // Handle existing bridge updates
             // Make sure we have a BIN
             if (!rowData.bin) {
                 cell.restoreOldValue();
@@ -496,28 +678,56 @@
         // Add New Bridge button handler
         document.getElementById('addBridgeBtn').addEventListener('click', () => {
             isAddingNewBridge = true;
-            table.addRow({})
-                .then(row => {
-                    row.scrollTo();
-                    table.selectRow(row);
-                });
+            saveBridgeBtn.disabled = false;
+            
+            // Use addData instead of addRow for better control
+            const newBridgeData = {
+                bin: "",
+                lat: "",
+                lon: "",
+                region: "",
+                county: "",
+                due: "",
+                spans: "",
+                posting: "",
+                prev_gr: "",
+                flags: "",
+                // Add all other fields as empty strings
+                field_date: "",
+                est_duration: "",
+                special_access: "",
+                notes: "",
+                nstm: "",
+                spe: "",
+                stds: ""
+            };
+            
+            table.addData([newBridgeData], true) // true adds to top
+            .then((rows) => {
+                const newRow = rows[0];
+                newRow.scrollTo();
+                
+                // Focus on BIN cell and start editing
+                setTimeout(() => {
+                    const binCell = newRow.getCell('bin');
+                    if (binCell) {
+                        binCell.edit();
+                    }
+                }, 100);
+            })
+            .catch(error => {
+                console.error('Error adding new bridge:', error);
+                isAddingNewBridge = false;
+                saveBridgeBtn.disabled = true;
+            });
         });
 
         const saveBridgeBtn = document.getElementById('saveBridgeBtn');
 
-        // Enable/disable save button based on required fields
-        table.on("cellEdited", function(cell) {
-            if (isAddingNewBridge) {
-                const row = cell.getRow();
-                const data = row.getData();
-                const hasRequiredFields = data.bin && data.lat && data.lon;
-                saveBridgeBtn.disabled = !hasRequiredFields;
-            }
-        });
-
         // Save Bridge button handler
         saveBridgeBtn.addEventListener('click', () => {
-            const newRow = table.getRows().slice(-1)[0];
+            const rows = table.getRows();
+            const newRow = rows[rows.length - 1]; // Get last row
             const newRowData = newRow.getData();
 
             // Validate required fields
@@ -572,10 +782,10 @@
             })
             .then(result => {
                 console.log('Created new bridge:', result);
-                isAddingNewBridge = false;
+                isAddingNewBridge = false; // Reset the flag
+                saveBridgeBtn.disabled = true; // Disable save button
                 table.setData("/api/bridges")
                     .then(() => {
-                        saveBridgeBtn.disabled = true;
                         alert('Bridge saved successfully!');
                     });
             })
